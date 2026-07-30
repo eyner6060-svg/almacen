@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sin Conexión - Sistema de Almacén</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .container {
+      text-align: center;
+      max-width: 420px;
+      width: 100%;
+    }
+    
+    .card {
+      background: white;
+      border-radius: 20px;
+      padding: 40px 30px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+    
+    .icon-container {
+      width: 100px;
+      height: 100px;
+      background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 28px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+    
+    .icon-container svg {
+      width: 50px;
+      height: 50px;
+      fill: #d97706;
+    }
+    
+    h1 {
+      font-size: 28px;
+      color: #1f2937;
+      margin-bottom: 12px;
+      font-weight: 700;
+    }
+    
+    .subtitle {
+      font-size: 16px;
+      color: #6b7280;
+      margin-bottom: 32px;
+      line-height: 1.6;
+    }
+    
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 24px;
+      padding: 12px 20px;
+      background: #fef2f2;
+      border-radius: 12px;
+      color: #dc2626;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      background: #dc2626;
+      border-radius: 50%;
+      animation: blink 1.5s ease-in-out infinite;
+    }
+    
+    .status-dot.connected {
+      background: #16a34a;
+    }
+    
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .button-group {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 16px 28px;
+      background: #1e40af;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      width: 100%;
+    }
+    
+    .button:hover {
+      background: #1e3a8a;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(30, 64, 175, 0.4);
+    }
+    
+    .button:active {
+      transform: translateY(0);
+    }
+    
+    .button svg {
+      width: 20px;
+      height: 20px;
+    }
+    
+    .button-secondary {
+      background: white;
+      color: #1e40af;
+      border: 2px solid #1e40af;
+    }
+    
+    .button-secondary:hover {
+      background: #eff6ff;
+    }
+    
+    .tips {
+      margin-top: 28px;
+      padding: 20px;
+      background: #f8fafc;
+      border-radius: 12px;
+      text-align: left;
+    }
+    
+    .tips h3 {
+      font-size: 14px;
+      color: #374151;
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+    
+    .tips ul {
+      list-style: none;
+    }
+    
+    .tips li {
+      font-size: 14px;
+      color: #6b7280;
+      padding: 8px 0;
+      padding-left: 24px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .tips li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      width: 8px;
+      height: 8px;
+      background: #1e40af;
+      border-radius: 50%;
+    }
+    
+    .tips li svg {
+      width: 16px;
+      height: 16px;
+      color: #1e40af;
+    }
+    
+    .footer {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid #e5e7eb;
+      font-size: 12px;
+      color: #9ca3af;
+    }
+    
+    .loading {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    
+    .loading.active {
+      display: flex;
+    }
+    
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid transparent;
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .offline-queue {
+      margin-top: 20px;
+      padding: 16px;
+      background: #fffbeb;
+      border-radius: 12px;
+      border: 1px solid #fde68a;
+    }
+    
+    .offline-queue h4 {
+      font-size: 14px;
+      color: #92400e;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .offline-queue p {
+      font-size: 13px;
+      color: #a16207;
+    }
+    
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px 8px;
+      background: #d97706;
+      color: white;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="icon-container">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+          <path d="M23.64 7c-.45-.34-4.93-4-11.64-4-1.5 0-2.89.19-4.15.48L18.18 13.8 23.64 7zM3.41 1.31L2 2.72l2.05 2.05C1.91 5.76.59 6.82.36 7l11.63 14.49.01.01.01-.01 3.9-4.86 3.32 3.32 1.41-1.41L3.41 1.31zM12 4c4.24 0 7.58 1.65 9.63 3.02l-6.55 7.35-7.86-7.86C8.93 5.65 10.34 5 12 5z"/>
+        </svg>
+      </div>
+      
+      <h1>Sin Conexión</h1>
+      
+      <p class="subtitle">
+        No tienes conexión a internet. Verifica tu conexión e intenta nuevamente.
+      </p>
+      
+      <div class="status-indicator">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">Sin conexión</span>
+      </div>
+      
+      <div class="button-group">
+        <button class="button" onclick="retryConnection()" id="retryBtn">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+          </svg>
+          <span id="retryText">Reintentar Conexión</span>
+          <span class="spinner" id="spinner"></span>
+        </button>
+        
+        <button class="button button-secondary" onclick="window.history.back()">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+          </svg>
+          Volver Atrás
+        </button>
+      </div>
+      
+      <div class="offline-queue" id="offlineQueue" style="display: none;">
+        <h4>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+          </svg>
+          Operaciones Pendientes
+          <span class="badge" id="pendingCount">0</span>
+        </h4>
+        <p>Tus operaciones se procesarán automáticamente cuando vuelva la conexión.</p>
+      </div>
+      
+      <div class="tips">
+        <h3>Mientras tanto puedes:</h3>
+        <ul>
+          <li>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 15.82 9.64 15 12 15s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/>
+            </svg>
+            Ver datos previamente cargados
+          </li>
+          <li>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 4v16a1 1 0 0 0 1.5.86l14-8a1 1 0 0 0 0-1.72l-14-8A1 1 0 0 0 3 4z"/>
+            </svg>
+            Usar el escáner QR
+          </li>
+          <li>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+            </svg>
+            Crear pedidos (se guardarán localmente)
+          </li>
+          <li>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/>
+            </svg>
+            Revisar el historial de movimientos
+          </li>
+        </ul>
+      </div>
+      
+      <div class="footer">
+        Sistema de Gestión de Almacén • PWA
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // Check online status
+    function updateOnlineStatus() {
+      const statusDot = document.getElementById('statusDot');
+      const statusText = document.getElementById('statusText');
+      
+      if (navigator.onLine) {
+        statusDot.classList.add('connected');
+        statusText.textContent = 'Conexión restaurada';
+        // Auto redirect after brief delay
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      } else {
+        statusDot.classList.remove('connected');
+        statusText.textContent = 'Sin conexión';
+      }
+    }
+    
+    // Retry connection
+    function retryConnection() {
+      const retryBtn = document.getElementById('retryBtn');
+      const retryText = document.getElementById('retryText');
+      const spinner = document.getElementById('spinner');
+      
+      retryBtn.disabled = true;
+      retryText.style.display = 'none';
+      spinner.classList.add('active');
+      
+      // Try to fetch
+      fetch('/', { method: 'HEAD' })
+        .then(() => {
+          window.location.reload();
+        })
+        .catch(() => {
+          // Still offline
+          setTimeout(() => {
+            retryBtn.disabled = false;
+            retryText.style.display = 'inline';
+            spinner.classList.remove('active');
+            updateOnlineStatus();
+          }, 2000);
+        });
+    }
+    
+    // Check for pending operations
+    async function checkPendingOperations() {
+      if ('indexedDB' in window) {
+        try {
+          const db = await new Promise((resolve, reject) => {
+            const request = indexedDB.open('almacen-offline', 2);
+            request.onerror = () => reject(request.error);
+            request.onsuccess = () => resolve(request.result);
+            request.onupgradeneeded = (event) => {
+              const db = event.target.result;
+              if (!db.objectStoreNames.contains('pendingRequests')) {
+                db.createObjectStore('pendingRequests', { keyPath: 'id', autoIncrement: true });
+              }
+            };
+          });
+          
+          const tx = db.transaction('pendingRequests', 'readonly');
+          const store = tx.objectStore('pendingRequests');
+          const count = await new Promise((resolve) => {
+            const request = store.count();
+            request.onsuccess = () => resolve(request.result);
+          });
+          
+          if (count > 0) {
+            document.getElementById('offlineQueue').style.display = 'block';
+            document.getElementById('pendingCount').textContent = count;
+          }
+        } catch (e) {
+          console.log('Could not check pending operations:', e);
+        }
+      }
+    }
+    
+    // Listen for online/offline events
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    
+    // Initial check
+    updateOnlineStatus();
+    checkPendingOperations();
+  </script>
+</body>
+</html>

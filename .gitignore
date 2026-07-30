@@ -1,0 +1,100 @@
+# dependencias
+node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# producción
+/build
+
+# misceláneo
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# archivos env (opcional para commit)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+local-*
+*.log
+dev.log
+dev.out.log
+test
+prompt
+
+server.log
+
+# Skills directory
+/skills/
+
+# Archivos de base de datos (se crean frescos)
+*.db
+*.db-journal
+db/*.db
+
+# Archivos subidos (contenido de usuario)
+/public/uploads/*
+!/public/uploads/.gitkeep
+/private/uploads/*
+
+# Archivos de respaldo
+*.bak
+*.old
+*.backup
+*.zip
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Herramientas de asistencia (no se commitean)
+.opencode/
+.aider/
+.cursor/
+.continue/
+.windsurf/
+.codeium/
+AGENTS.md
+CLAUDE.md
+.cursorrules
+.cursorignore
+
+# SO
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Archivos temporales
+tmp/
+temp/
+*.tmp
+
+# Respaldos de base de datos
+backups/*.sql

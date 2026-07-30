@@ -1,0 +1,1117 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model SystemConfig {
+  id              Int      @id @default(autoincrement())
+  institutionName String   @default("Almacén Institucional")
+  logoUrl         String?
+  primaryColor    String   @default("#1e40af")
+  secondaryColor  String   @default("#3b82f6")
+  accentColor     String   @default("#f59e0b")
+  faviconUrl      String?
+  tabTitle        String   @default("Almacén")
+  footerText      String?
+  force2FA        Boolean  @default(false)
+  exemptedRoles   String?  @default("[]")
+  maxPinAttempts  Int      @default(5)
+  pinLockoutMinutes Int   @default(15)
+  backupEnabled   Boolean  @default(false)
+  backupSchedule  String?  // Intervalo en minutos (ej: "60", "1440") o expresión cron
+  backupRetentionDays Int @default(30)
+  backupPath      String   @default("./backups")
+  updatedAt       DateTime @updatedAt
+}
+
+// Catálogo de tipos de bienes predefinidos
+model ItemCatalog {
+  id              Int      @id @default(autoincrement())
+  name            String
+  brand           String   @default("S/M")
+  model           String   @default("S/M")
+  category        String
+  itemType        ItemType @default(PATRIMONIAL)
+  unit            String   @default("UNIDAD") // Unidad de medida: UNIDAD, KG, LITRO, METRO, CAJA, etc.
+  technicalSpecs  String?
+  defaultMinStock Int      @default(1)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([category])
+  @@index([isActive])
+}
+
+model User {
+  id                      Int                      @id @default(autoincrement())
+  fullName                String
+  dni                     String                   @unique
+  phone                   String?
+  position                String
+  email                   String                   @unique
+  password                String
+  pin                     String?
+  role                    Role
+  isActive                Boolean                  @default(true)
+  officeId                Int?
+  isDriver                Boolean                  @default(false)
+  canAuthorizeOrders      Boolean                  @default(false)
+  canAuthorizeFuel        Boolean                  @default(false)
+  canAuthorizeAssignments Boolean                  @default(false)
+  canAuthorizeLoans       Boolean                  @default(false)
+  twoFactorEnabled        Boolean                  @default(false)
+  twoFactorSecret         String?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  documents               Document[]
+  fuelEntries             FuelEntry[]
+  fuelRequests            FuelRequest[]
+  ingressesReceived       Ingress[]
+  itemStatusChanges       ItemStatusLog[]
+  notifications           Notification[]
+  ordersCreated           Order[]                  @relation("OrderCreator")
+  orderAuthorizations     OrderAuthorization[]
+  office                  Office?                  @relation(fields: [officeId], references: [id])
+  vehicle                 Vehicle?
+  managedWarehouses       Warehouse[]
+  auditLogs               AuditLog[]
+  sessions                UserSession[]
+  notificationPreferences NotificationPreference[]
+  digitalSignatures       DigitalSignature[]
+  itemMovements           ItemMovement[]           @relation("MovementBy")
+  qrScanLogs              QRScanLog[]
+  assignedAssets     AssignedAsset[]
+  apiKeys                 ApiKey[]
+  securityEvents          SecurityEvent[]
+  loansCreated            Loan[]       @relation("LoanCreator")
+  almaceneroAuths         Loan[]       @relation("AlmaceneroAuth")
+  jefeAuths               Loan[]       @relation("JefeAuth")
+  rejectionAuths          Loan[]       @relation("RejectionAuth")
+
+  tDRs                    TDR[]
+  passwordResetToken      PasswordResetToken?
+
+  @@index([email])
+  @@index([dni])
+  @@index([isActive])
+  @@index([role, officeId, isActive])
+}
+
+model PasswordResetToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([token])
+  @@index([expiresAt])
+}
+
+model Office {
+  id          Int      @id @default(autoincrement())
+  name        String
+  code        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  orders      Order[]
+  users       User[]
+
+  @@index([isActive])
+}
+
+model Warehouse {
+  id          Int       @id @default(autoincrement())
+  name        String
+  location    String
+  description String?
+  isActive    Boolean   @default(true)
+  managerId   Int?
+  createdAt   DateTime  @default(now())
+  ingresses   Ingress[]
+  items       Item[]
+  manager     User?     @relation(fields: [managerId], references: [id])
+
+  @@index([isActive])
+  @@index([managerId])
+}
+
+model Item {
+  id                 Int                @id @default(autoincrement())
+  name               String
+  model              String             @default("S/M")
+  brand              String             @default("S/M")
+  color              String?
+  series             String?            @default("S/S")
+  code               String             @unique
+  patrimonialCode    String?
+  patrimonialCodes   String? // Arreglo JSON de códigos patrimoniales para múltiples unidades
+  itemType           ItemType
+  category           String
+  unit               String             @default("UNIDAD") // Unidad de medida: UNIDAD, KG, LITRO, METRO, CAJA, etc.
+  imageUrl           String?
+  quantity           Int                @default(0)
+  minStock           Int                @default(5)
+  status             String             @default("NUEVO")
+  location           String?
+  warehouseId        Int
+  qrCode             String?
+  barcodeData        String?
+  technicalSpecs     String?
+  supportDocumentUrl String? // Archivo de sustento de adquisición
+  isDeleted          Boolean            @default(false) // Para papelera
+  deletedAt          DateTime? // Fecha de eliminación
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  ingresses          Ingress[]
+  warehouse          Warehouse          @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  statusLogs         ItemStatusLog[]
+  orderItems         OrderItem[]
+  patrimonialUnits   PatrimonialUnit[]
+  itemMovements      ItemMovement[]
+  warranty           Warranty?
+  demandPredictions  DemandPrediction[]
+  qrScanLogs         QRScanLog[]
+  assignedAssets     AssignedAsset[]
+  loanItems          LoanItem[]
+
+  @@index([category])
+  @@index([status])
+  @@index([warehouseId])
+  @@index([isDeleted, itemType, status])
+  @@index([warehouseId, isDeleted])
+  @@index([name])
+  @@index([warehouseId, isDeleted, status])
+  @@index([category, status, isDeleted])
+  @@index([itemType, status, isDeleted])
+}
+
+model ItemStatusLog {
+  id         Int        @id @default(autoincrement())
+  itemId     Int
+  fromStatus String
+  toStatus   String
+  reason     String?
+  reportedBy Int
+  createdAt  DateTime   @default(now())
+  reporter   User       @relation(fields: [reportedBy], references: [id], onDelete: SetNull)
+  item       Item       @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@index([createdAt])
+  @@index([itemId, createdAt])
+}
+
+model Order {
+  id                      Int                      @id @default(autoincrement())
+  orderNumber             String                   @unique
+  status                  OrderStatus              @default(PENDIENTE)
+  requestedById           Int
+  officeId                Int
+  notes                   String?
+  pdfUrl                  String?
+  signedPdfUrl            String?
+  issueDate               DateTime                 @default(now())
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  documents               Document[]
+  office                  Office                   @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  requestedBy             User                     @relation("OrderCreator", fields: [requestedById], references: [id])
+  authorizations          OrderAuthorization[]
+  items                   OrderItem[]
+  patrimonialExitDocument PatrimonialExitDocument?
+
+  @@index([createdAt])
+  @@index([status, createdAt])
+  @@index([officeId, status, createdAt])
+  @@index([requestedById, status, createdAt])
+  @@index([officeId, requestedById, status, createdAt])
+}
+
+model OrderItem {
+  id                 Int              @id @default(autoincrement())
+  orderId            Int
+  itemId             Int
+  quantity           Int
+  patrimonialCode    String? // Código patrimonial específico de la unidad entregada
+  patrimonialUnitId  Int? // Referencia a la unidad patrimonial específica
+  issueDate          DateTime?
+  expectedReturnDate DateTime? // Fecha de retorno esperada (15 días por defecto para patrimoniales)
+  returnDate         DateTime? // Fecha de retorno registrada
+  actualReturnDate   DateTime? // Fecha real de retorno
+  currentLocation    String? // Ubicación actual del bien si no fue retornado
+  isOverdue          Boolean          @default(false) // Si está vencido el plazo de retorno
+  notes              String?
+  item               Item             @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  order              Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  patrimonialUnit    PatrimonialUnit? @relation(fields: [patrimonialUnitId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([itemId])
+  @@index([isOverdue])
+  @@index([patrimonialUnitId])
+  @@index([itemId, issueDate, actualReturnDate])
+}
+
+model PatrimonialUnit {
+  id              Int         @id @default(autoincrement())
+  itemId          Int
+  patrimonialCode String      @unique
+  status          String      @default("NUEVO")
+  currentHolderId Int? // Usuario que tiene el bien actualmente
+  isAvailable     Boolean     @default(true)
+  notes           String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  item            Item            @relation(fields: [itemId], references: [id])
+  orderItems      OrderItem[]
+  assignedAssets  AssignedAsset[]
+  loanItems        LoanItem[]
+
+  @@index([itemId])
+  @@index([isAvailable])
+  @@index([currentHolderId])
+  @@index([itemId, isAvailable])
+}
+
+model OrderAuthorization {
+  id           Int        @id @default(autoincrement())
+  orderId      Int
+  userId       Int
+  role         Role
+  authorizedAt DateTime   @default(now())
+  method       AuthMethod @default(PIN)
+  ipAddress    String?
+  user         User       @relation(fields: [userId], references: [id])
+  order        Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([userId])
+}
+
+model Document {
+  id          Int      @id @default(autoincrement())
+  orderId     Int?
+  uploadedBy  Int
+  fileName    String
+  fileUrl     String
+  fileType    String
+  description String?
+  createdAt   DateTime @default(now())
+  uploader    User     @relation(fields: [uploadedBy], references: [id])
+  order       Order?   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([uploadedBy])
+}
+
+model Notification {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  title     String
+  message   String
+  type      NotifType
+  isRead    Boolean   @default(false)
+  relatedId Int?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@index([userId, isRead, createdAt])
+  @@index([userId, createdAt])
+}
+
+model Ingress {
+  id             Int       @id @default(autoincrement())
+  ingressNumber  String    @unique
+  itemId         Int
+  quantity       Int
+  previousStock  Int
+  newStock       Int
+  supplier       String?
+  documentNumber String?
+  receiptUrl     String?
+  notes          String?
+  receivedById   Int
+  warehouseId    Int
+  createdAt      DateTime  @default(now())
+  warehouse      Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  receivedBy     User      @relation(fields: [receivedById], references: [id])
+  item           Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@index([warehouseId])
+  @@index([createdAt])
+  @@index([warehouseId, createdAt])
+  @@index([receivedById])
+}
+
+model Vehicle {
+  id           Int           @id @default(autoincrement())
+  name         String
+  plate        String        @unique
+  description  String?
+  isActive     Boolean       @default(true)
+  driverId     Int?          @unique
+  createdAt    DateTime      @default(now())
+  fuelRequests FuelRequest[]
+  driver       User?         @relation(fields: [driverId], references: [id])
+
+  @@index([isActive])
+  @@index([plate])
+}
+
+model FuelInventory {
+  id        Int         @id @default(autoincrement())
+  fuelType  FuelType    @unique
+  quantity  Float       @default(0)
+  minStock  Float       @default(10)
+  updatedAt DateTime    @updatedAt
+  entries   FuelEntry[]
+
+  @@index([fuelType])
+}
+
+model FuelEntry {
+  id              Int           @id @default(autoincrement())
+  entryNumber     String        @unique
+  fuelType        FuelType
+  quantity        Float
+  previousStock   Float
+  newStock        Float
+  supplier        String?
+  documentNumber  String?
+  notes           String?
+  receivedById    Int
+  fuelInventoryId Int
+  createdAt       DateTime      @default(now())
+  fuelInventory   FuelInventory @relation(fields: [fuelInventoryId], references: [id], onDelete: Cascade)
+  receivedBy      User          @relation(fields: [receivedById], references: [id])
+
+  @@index([fuelType])
+  @@index([createdAt])
+  @@index([fuelInventoryId])
+  @@index([receivedById])
+}
+
+model FuelRequest {
+  id            Int                    @id @default(autoincrement())
+  requestNumber String                 @unique
+  fuelType      FuelType
+  quantity      Float
+  reason        String
+  destinations  String
+  requestDate   DateTime
+  status        FuelRequestStatus      @default(PENDIENTE)
+  requestedById Int
+  vehicleId     Int
+  pdfUrl        String?
+  signedPdfUrl  String?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  vehicle       Vehicle                @relation(fields: [vehicleId], references: [id])
+  requestedBy   User                   @relation(fields: [requestedById], references: [id])
+  signatures    FuelRequestSignature[]
+
+  @@index([vehicleId])
+  @@index([requestedById])
+  @@index([requestDate])
+  @@index([status, createdAt])
+  @@index([requestedById, status, createdAt])
+  @@index([requestDate, status, fuelType])
+}
+
+model FuelRequestSignature {
+  id            Int         @id @default(autoincrement())
+  fuelRequestId Int
+  order         Int
+  position      String
+  signerName    String?
+  signedAt      DateTime?
+  signatureType String?
+  fuelRequest   FuelRequest @relation(fields: [fuelRequestId], references: [id], onDelete: Cascade)
+
+  @@index([fuelRequestId])
+  @@index([fuelRequestId, order])
+}
+
+model SignatureConfig {
+  id         Int     @id @default(autoincrement())
+  type       String
+  position   Int
+  title      String
+  isRequired Boolean @default(true)
+  isActive   Boolean @default(true)
+
+  @@index([type])
+  @@index([isActive])
+}
+
+model PatrimonialExitDocument {
+  id            Int                        @id @default(autoincrement())
+  orderId       Int                        @unique
+  requesterName String
+  exitReason    String
+  exitDate      DateTime
+  pdfUrl        String?
+  signedPdfUrl  String?
+  createdAt     DateTime                   @default(now())
+  order         Order                      @relation(fields: [orderId], references: [id])
+  signatures    PatrimonialExitSignature[]
+
+  @@index([orderId])
+  @@index([exitDate])
+}
+
+model PatrimonialExitSignature {
+  id                        Int                     @id @default(autoincrement())
+  patrimonialExitDocumentId Int
+  order                     Int
+  position                  String
+  signerName                String?
+  signedAt                  DateTime?
+  patrimonialExitDocument   PatrimonialExitDocument @relation(fields: [patrimonialExitDocumentId], references: [id], onDelete: Cascade)
+
+  @@index([patrimonialExitDocumentId])
+}
+
+enum Role {
+  ADMINISTRADOR
+  ALMACENERO
+  JEFE_OFICINA
+  TRABAJADOR
+}
+
+enum ItemType {
+  CONSUMIBLE
+  PATRIMONIAL
+}
+
+// Estados dinámicos de bienes (gestionables por el usuario)
+model ItemStatusEnum {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique // Identificador único: OPERATIVO, AVERIADO, etc.
+  label     String   // Nombre visible: Operativo, Averiado, etc.
+  color     String   @default("gray") // Color para badges: green, yellow, red, blue, etc.
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+}
+
+enum OrderStatus {
+  PENDIENTE
+  AUTORIZADO_JEFE
+  AUTORIZADO_ALMACENERO
+  COMPLETADO
+  RECHAZADO
+}
+
+enum AuthMethod {
+  PIN
+  FIRMA_FISICA
+}
+
+enum NotifType {
+  STOCK_BAJO
+  PEDIDO_PENDIENTE
+  PEDIDO_AUTORIZADO
+  PEDIDO_RECHAZADO
+  BIEN_VENCIDO
+  REPORTE_MENSUAL
+  GARANTIA_PROXIMA_VENCER
+  ITEM_MOVIMIENTO
+  WORKFLOW_EJECUTADO
+  SOLICITUD_COMBUSTIBLE
+  PRESTAMO_CREADO
+}
+
+enum FuelType {
+  GASOLINA
+  PETROLEO
+}
+
+enum AssignmentStatus {
+  ASIGNADO
+  DEVUELTO
+  PERDIDO
+}
+
+enum FuelRequestStatus {
+  PENDIENTE
+  AUTORIZADO
+  COMPLETADO
+  RECHAZADO
+}
+
+// Sistema de Auditoría
+model AuditLog {
+  id          Int           @id @default(autoincrement())
+  userId      Int?
+  action      String // CREATE, UPDATE, DELETE, LOGIN, LOGOUT, AUTHORIZE, etc.
+  entityType  String // User, Order, Item, Vehicle, FuelRequest, etc.
+  entityId    Int?
+  ipAddress   String?
+  userAgent   String?
+  oldValue    String? // JSON con datos anteriores
+  newValue    String? // JSON con datos nuevos
+  description String
+  severity    AuditSeverity @default(INFO)
+  createdAt   DateTime      @default(now())
+  user        User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entityId])
+  @@index([createdAt])
+  @@index([severity])
+  @@index([action, createdAt])
+  @@index([entityType, entityId])
+  @@index([userId, action, createdAt])
+}
+
+enum AuditSeverity {
+  INFO // Operaciones normales
+  WARNING // Operaciones sensibles
+  CRITICAL // Operaciones críticas (cambios de rol, eliminaciones)
+}
+
+// Sesiones de usuario para control de actividad
+model UserSession {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  sessionToken String   @unique
+  ipAddress    String?
+  userAgent    String?
+  lastActivity DateTime @default(now())
+  expiresAt    DateTime
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionToken])
+  @@index([isActive])
+  @@index([expiresAt])
+}
+
+// =============================================
+// NUEVOS MODELOS - FUNCIONALIDADES AVANZADAS
+// =============================================
+
+// Preferencias de Notificación
+model NotificationPreference {
+  id           Int     @id @default(autoincrement())
+  userId       Int
+  notifType    String
+  emailEnabled Boolean @default(true)
+  pushEnabled  Boolean @default(true)
+  smsEnabled   Boolean @default(false)
+  user         User    @relation(fields: [userId], references: [id])
+
+  @@unique([userId, notifType])
+  @@index([userId])
+}
+
+// Reglas de Flujo de Trabajo
+model WorkflowRule {
+  id          Int                 @id @default(autoincrement())
+  name        String
+  description String?
+  triggerType String // ORDER_CREATED, STOCK_LOW, ITEM_STATUS_CHANGED
+  conditions  String // JSON
+  actions     String // JSON
+  isActive    Boolean             @default(true)
+  priority    Int                 @default(0)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  executions  WorkflowExecution[]
+
+  @@index([triggerType])
+  @@index([isActive])
+}
+
+// Registro de Ejecución de Flujo
+model WorkflowExecution {
+  id         Int          @id @default(autoincrement())
+  ruleId     Int
+  entityType String
+  entityId   Int
+  status     String // SUCCESS, FAILED, PENDING
+  executedAt DateTime     @default(now())
+  result     String? // JSON
+  rule       WorkflowRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId])
+  @@index([status])
+}
+
+// Seguimiento de Movimientos de Artículos
+model ItemMovement {
+  id              Int      @id @default(autoincrement())
+  patrimonialCode String
+  itemId          Int
+  fromLocation    String?
+  toLocation      String
+  fromUserId      Int?
+  toUserId        Int?
+  movedById       Int
+  reason          String?
+  notes           String?
+  latitude        Float?
+  longitude       Float?
+  createdAt       DateTime @default(now())
+  item            Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  movedBy         User     @relation("MovementBy", fields: [movedById], references: [id])
+
+  @@index([patrimonialCode])
+  @@index([itemId])
+  @@index([createdAt])
+  @@index([itemId, createdAt])
+  @@index([itemId, fromLocation, toLocation])
+  @@index([toUserId])
+  @@index([movedById])
+  @@index([patrimonialCode, createdAt])
+}
+
+// Registro de Escaneo QR
+model QRScanLog {
+  id          Int      @id @default(autoincrement())
+  itemId      Int?
+  code        String
+  scanType    String // ITEM, PATRIMONIAL, LOCATION
+  scannedById Int
+  latitude    Float?
+  longitude   Float?
+  deviceInfo  String?
+  createdAt   DateTime @default(now())
+  item        Item?    @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  scannedBy   User     @relation(fields: [scannedById], references: [id])
+
+  @@index([code])
+  @@index([scannedById])
+  @@index([createdAt])
+  @@index([itemId])
+}
+
+// Seguimiento de Garantías
+model Warranty {
+  id              Int            @id @default(autoincrement())
+  itemId          Int            @unique // Relación uno a uno requiere unique
+  purchaseDate    DateTime
+  expiryDate      DateTime
+  documentUrl     String?
+  supplierName    String?
+  supplierContact String?
+  warrantyTerms   String?
+  status          WarrantyStatus @default(ACTIVE)
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  item            Item           @relation(fields: [itemId], references: [id])
+
+  @@index([status])
+  @@index([expiryDate])
+}
+
+enum WarrantyStatus {
+  ACTIVE
+  EXPIRED
+  CLAIMED
+  VOID
+}
+
+// Plantillas de Reporte
+model ReportTemplate {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  type        String // INVENTORY, MOVEMENTS, CONSUMPTION, AUDIT
+  config      String // JSON con columnas, filtros, formato
+  createdBy   Int
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([type])
+  @@index([createdBy])
+}
+
+// Firmas Digitales
+model DigitalSignature {
+  id            Int      @id @default(autoincrement())
+  documentType  String // ORDER, PATRIMONIAL_EXIT, FUEL_REQUEST
+  documentId    Int
+  userId        Int
+  signatureData String // Imagen de firma en Base64
+  signedAt      DateTime @default(now())
+  ipAddress     String?
+  userAgent     String?
+  certData      String? // Información del certificado si está disponible
+  user          User     @relation(fields: [userId], references: [id])
+
+  @@index([documentType])
+  @@index([documentId])
+  @@index([userId])
+  @@index([documentType, documentId])
+}
+
+// Claves API para integraciones externas
+model ApiKey {
+  id          Int       @id @default(autoincrement())
+  name        String
+  key         String    @unique
+  userId      Int
+  permissions String // Arreglo JSON de endpoints permitidos
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id])
+
+  @@index([key])
+  @@index([userId])
+  @@index([isActive])
+}
+
+// Webhooks para integraciones externas
+model Webhook {
+  id              Int               @id @default(autoincrement())
+  name            String
+  url             String
+  events          String // Arreglo JSON de eventos
+  secret          String
+  isActive        Boolean           @default(true)
+  lastTriggeredAt DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  deliveries      WebhookDelivery[]
+
+  @@index([isActive])
+}
+
+// Registro de Entrega de Webhook
+model WebhookDelivery {
+  id           Int      @id @default(autoincrement())
+  webhookId    Int
+  event        String
+  payload      String // JSON
+  responseCode Int?
+  success      Boolean  @default(false)
+  attempts     Int      @default(1)
+  deliveredAt  DateTime @default(now())
+  webhook      Webhook  @relation(fields: [webhookId], references: [id])
+
+  @@index([webhookId])
+  @@index([deliveredAt])
+}
+
+// Registros de Sincronización para SIGA/Dynamics
+model SyncLog {
+  id             Int       @id @default(autoincrement())
+  system         String // SIGA, DYNAMICS, OTHER
+  operation      String // IMPORT, EXPORT
+  entityType     String
+  recordsTotal   Int
+  recordsSuccess Int
+  recordsFailed  Int
+  status         String // SUCCESS, PARTIAL, FAILED
+  errorDetails   String? // JSON con detalles del error
+  startedAt      DateTime  @default(now())
+  completedAt    DateTime?
+
+  @@index([system])
+  @@index([status])
+  @@index([startedAt])
+}
+
+// Predicción de Demanda para inventario
+model DemandPrediction {
+  id              Int      @id @default(autoincrement())
+  itemId          Int
+  predictionDate  DateTime
+  predictedDemand Float
+  confidence      Float // 0-1
+  basedOnMonths   Int // Meses de historial utilizados
+  actualDemand    Float? // Se completa después para precisión
+  createdAt       DateTime @default(now())
+  item            Item     @relation(fields: [itemId], references: [id])
+
+  @@index([itemId])
+  @@index([predictionDate])
+}
+
+// Solicitudes de Asignación de Bienes
+model AssignmentRequest {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  userName        String
+  userOffice      String
+  items           String   // JSON array de {itemId, itemName, quantity}
+  notes           String?
+  status          AssignmentRequestStatus @default(PENDING)
+  rejectionReason String?
+  processedById   Int?
+  processedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([createdAt])
+  @@index([userId, status, createdAt])
+}
+
+enum AssignmentRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Bienes Asignados a usuarios
+model AssignedAsset {
+  id                  Int              @id @default(autoincrement())
+  userId              Int
+  itemId              Int
+  patrimonialUnitId   Int?
+  quantity            Int              @default(1)
+  assignmentDate      DateTime         @default(now())
+  assignmentDocNumber String
+  assignmentDocUrl    String?
+  returnDate          DateTime?
+  returnDocNumber     String?
+  returnDocUrl        String?
+  status              AssignmentStatus @default(ASIGNADO)
+  notes               String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  user            User            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  item            Item            @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  patrimonialUnit PatrimonialUnit? @relation(fields: [patrimonialUnitId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([itemId])
+  @@index([status])
+  @@index([assignmentDate])
+  @@index([userId, status])
+}
+
+// Eventos de Seguridad para análisis forense
+model SecurityEvent {
+  id                Int      @id @default(autoincrement())
+  userId            Int?
+  eventType         String // LOGIN_SUCCESS, LOGIN_FAILED, SUSPICIOUS_ACCESS, PERMISSION_DENIED
+  ipAddress         String?
+  geolocation       String? // País, Ciudad desde IP
+  userAgent         String?
+  deviceFingerprint String?
+  details           String? // JSON
+  severity          String // INFO, WARNING, CRITICAL
+  createdAt         DateTime @default(now())
+  user              User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([eventType])
+  @@index([severity])
+  @@index([createdAt])
+  @@index([eventType, createdAt])
+}
+
+// Copias de seguridad de la base de datos
+enum BackupType {
+  MANUAL
+  SCHEDULED
+}
+
+enum BackupStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model BackupLog {
+  id           Int         @id @default(autoincrement())
+  fileName     String
+  fileSize     BigInt
+  type         BackupType
+  status       BackupStatus
+  filePath     String
+  errorMessage String?
+  triggeredBy  Int?
+  completedAt  DateTime?
+  createdAt    DateTime    @default(now())
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([type, createdAt])
+  @@index([triggeredBy])
+}
+
+// =============================================
+// SISTEMA DE NUMERACIÓN CORRELATIVA
+// =============================================
+
+model DocumentSequence {
+  id        Int      @id @default(autoincrement())
+  prefix    String   @unique   // PRESTAMO, VALE_COMBUSTIBLE, ORDEN_SALIDA
+  label     String             // "Documento de Préstamo", "Vale de Combustible", etc.
+  counter   Int      @default(0)
+  year      Int      @default(2026)
+  updatedAt DateTime @updatedAt
+}
+
+// =============================================
+// TÉRMINOS DE REFERENCIA (TDR) PARA COMPRAS
+// =============================================
+
+enum TDRStatus {
+  BORRADOR
+  GENERADO
+  APROBADO
+  OBSERVADO
+}
+
+enum TDRType {
+  BIENES
+  COMBUSTIBLE
+  DEVOLUCION
+}
+
+model TDR {
+  id              Int       @id @default(autoincrement())
+  tdrNumber       String    @unique   // TDR-001
+  tdrType         TDRType   @default(BIENES)
+  category        String    @default("")  // Categoría del bien (ej: CABLES, CONECTORES, COMBUSTIBLE)
+  title           String
+  justification   String    @default("")
+  objective       String    @default("")
+  items           String    // JSON array de {itemId, name, code, quantity, unit, technicalSpecs, currentStock, minStock, category}
+  requirements    String    @default("")
+  deliverySchedule String   @default("")
+  lugarEntrega    String    @default("")
+  formaPago       String    @default("")
+  presupuesto     String    @default("")
+  penalidades     String    @default("")
+  marcoLegal      String    @default("")
+  riesgos         String    @default("")
+  anticorrupcion  String    @default("")
+  adicional       String    @default("")
+  status          TDRStatus @default(BORRADOR)
+  fileUrl         String?   // Ruta al archivo .docx generado
+  generatedById   Int
+  isAutomatic     Boolean   @default(false)
+  notes           String?
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  generatedBy     User      @relation(fields: [generatedById], references: [id])
+
+  @@index([createdAt])
+  @@index([tdrType])
+  @@index([category])
+  @@index([generatedById])
+  @@index([deletedAt])
+  @@index([status, createdAt])
+  @@index([isAutomatic, createdAt])
+}
+
+// =============================================
+// PRÉSTAMOS DE BIENES A PERSONAS EXTERNAS
+// =============================================
+
+enum LoanStatus {
+  PENDIENTE
+  AUTORIZADO_ALMACENERO
+  AUTORIZADO_JEFE
+  PRESTADO
+  DEVUELTO
+  RECHAZADO
+}
+
+model Loan {
+  id                 Int         @id @default(autoincrement())
+  documentNumber     String      @unique   // PRESTAMO-001
+  documentLabel      String      @default("Documento de Préstamo")
+
+  // Datos del prestatario (persona externa)
+  borrowerName       String
+  borrowerDni        String?
+  borrowerPhone      String?
+  borrowerAddress    String?
+
+  // Detalles del préstamo
+  loanDate           DateTime    @default(now())
+  expectedReturnDate DateTime
+  actualReturnDate   DateTime?
+  reason             String
+
+  // Máquina de estados
+  status             LoanStatus  @default(PENDIENTE)
+
+  // Autorizaciones
+  almaceneroAuthId   Int?
+  almaceneroAuthAt   DateTime?
+  jefeAuthId         Int?
+  jefeAuthAt         DateTime?
+  rejectionReason    String?
+  rejectionAuthId    Int?
+  rejectionAt        DateTime?
+
+  // Documentos
+  pdfUrl             String?
+  signedPdfUrl       String?
+  deletedAt          DateTime?
+
+  // Relaciones
+  items              LoanItem[]
+  createdById        Int
+  createdBy          User        @relation("LoanCreator", fields: [createdById], references: [id])
+  almaceneroAuth     User?       @relation("AlmaceneroAuth", fields: [almaceneroAuthId], references: [id])
+  jefeAuth           User?       @relation("JefeAuth", fields: [jefeAuthId], references: [id])
+  rejectionAuth      User?       @relation("RejectionAuth", fields: [rejectionAuthId], references: [id])
+
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  @@index([documentNumber])
+  @@index([createdAt])
+  @@index([borrowerName])
+  @@index([deletedAt])
+  @@index([status, createdAt])
+  @@index([createdById])
+}
+
+model LoanItem {
+  id               Int             @id @default(autoincrement())
+  loanId           Int
+  itemId           Int
+
+  quantity         Int             @default(1)
+  patrimonialUnitId Int?
+
+  // Instantánea del bien al momento del préstamo
+  itemName         String
+  itemCode         String
+  itemBrand        String          @default("S/M")
+  itemModel        String          @default("S/M")
+  itemCategory     String?
+  patrimonialCode  String?
+  itemType         String          // CONSUMIBLE o PATRIMONIAL
+
+  loan             Loan            @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  item             Item            @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  patrimonialUnit  PatrimonialUnit? @relation(fields: [patrimonialUnitId], references: [id], onDelete: SetNull)
+
+  @@index([loanId])
+  @@index([itemId])
+  @@index([patrimonialUnitId])
+}

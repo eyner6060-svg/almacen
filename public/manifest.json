@@ -1,0 +1,52 @@
+{
+  "name": "Sistema de Gestión de Almacén",
+  "short_name": "Almacén",
+  "description": "Sistema integral de gestión de almacén y activos patrimoniales",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1e40af",
+  "theme_color": "#1e40af",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Inventario",
+      "short_name": "Inventario",
+      "description": "Ver inventario de items",
+      "url": "/?module=inventario",
+      "icons": [{ "src": "/icons/icon-inventario.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Escanear QR",
+      "short_name": "Escanear",
+      "description": "Escanear código QR de items",
+      "url": "/scan",
+      "icons": [{ "src": "/icons/icon-scan.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Pedidos",
+      "short_name": "Pedidos",
+      "description": "Ver y crear pedidos",
+      "url": "/?module=pedidos",
+      "icons": [{ "src": "/icons/icon-pedido.png", "sizes": "96x96" }]
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "lang": "es",
+  "dir": "ltr",
+  "scope": "/",
+  "prefer_related_applications": false
+}
