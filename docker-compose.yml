@@ -96,8 +96,8 @@ services:
     container_name: almacen-pgadmin
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:?PGADMIN_EMAIL is required}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?PGADMIN_PASSWORD is required}
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@almacen.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
       PGADMIN_LISTEN_PORT: 5050
     profiles:
       - admin
