@@ -4,7 +4,8 @@
 > **Aplicación:** Next.js (Sistema de Gestión de Almacén)  
 > **Red:** 192.168.11.0/24 — IP Pública: 38.252.209.72  
 > **Idioma:** Español (Perú)  
-> **Versión del documento:** 1.0
+> **Versión del documento:** 2.0  
+> **Repositorio:** https://github.com/eyner6060-svg/almacen
 
 ---
 
@@ -123,17 +124,17 @@ Verifique la instalación:
 git --version
 ```
 
-### 3.3 Clonar el Proyecto
+### 3.3 Clonar el Proyecto desde GitHub
 
 ```bash
 # Crear directorio de aplicaciones
 mkdir -p /opt/almacen
 
 # Clonar el repositorio
-git clone <URL_DEL_REPOSITORIO> /opt/almacen
+git clone https://github.com/eyner6060-svg/almacen /opt/almacen
 
-# Alternativa: si tiene los archivos localmente, use scp o rsync
-# rsync -avz ./ /opt/almacen/
+# Ingresar al directorio
+cd /opt/almacen
 ```
 
 ### 3.4 Abrir Puertos en el Firewall (firewalld)
@@ -177,29 +178,41 @@ restorecon -Rv /opt/almacen
 ```bash
 cd /opt/almacen
 
-# Ejecutar el script generador
-bash deploy/gen-ssl-certs.sh
+# Crear directorio para certificados
+mkdir -p ssl
+
+# Generar certificado autofirmado
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout ssl/key.pem \
+  -out ssl/cert.pem \
+  -subj "/C=PE/ST=Lima/L=Lima/O=DTEL/CN=dtel-almacen.local" \
+  -addext "subjectAltName=DNS:dtel-almacen.local,DNS:localhost,IP:38.252.209.72,IP:192.168.11.30"
 ```
 
-Esto generará los archivos `ssl/cert.pem` y `ssl/key.pem`. Por defecto usa `dtel-almacen.local` como dominio.
+Esto generará los archivos `ssl/cert.pem` y `ssl/key.pem`.
 
-> **Nota:** Los certificados autofirmados servirán para probar HTTPS localmente. Más adelante (sección 7) se explica cómo obtener certificados reales con Let's Encrypt.
+> **Nota:** Usamos HTTPS solo para la configuración inicial por simplicidad. Más adelante (sección 7) se explica cómo obtener certificados reales con Let's Encrypt.
 
-### 3.7 Preparar nginx.conf
+### 3.7 Preparar nginx.conf (solo HTTP para empezar)
 
-Para la primera prueba usaremos la configuración **solo HTTP**:
+El repositorio trae dos configuraciones de nginx:
+- `nginx.conf` — versión con SSL (requiere certificados)
+- `deploy/nginx.deploy.conf` — versión solo HTTP (para probar sin SSL)
+
+Para la primera prueba usaremos **solo HTTP**:
 
 ```bash
 cd /opt/almacen
 
-# Respaldar nginx.conf original (con SSL)
-cp nginx.conf nginx.conf.bak
+# Respaldar la versión con SSL
+cp nginx.conf nginx.conf.ssl
 
-# Copiar la versión HTTP
+# Copiar la versión HTTP como nginx.conf activo
 cp deploy/nginx.deploy.conf nginx.conf
 ```
 
-> Más adelante, cuando tenga certificados reales, restaurará el `nginx.conf.bak` o copiará la versión con SSL.
+> Cuando tenga certificados reales, restaurará la versión SSL con:
+> `cp nginx.conf.ssl nginx.conf`
 
 ### 3.8 Crear y Configurar Archivo .env
 
@@ -274,185 +287,85 @@ DATABASE_URL=postgresql://dtel:[TU_CONTRASEÑA]@postgres:5432/almacen_db?schema=
 1. Abra su navegador y vaya a `http://192.168.11.30:9000`
 2. Ingrese las credenciales:
    - **Usuario:** `dtel`
-   - **Contraseña:** (la que configuró al instalar Portainer)
-3. Seleccione el **entorno local** (generalmente aparece como "Primary" o "local")
+   - **Contraseña:** `DTEL2025*DOCKER`
+3. Seleccione el **entorno local** ("Primary" o "local")
 
-![Portainer Login](https://docs.portainer.io/images/login.png)
-*(Imagen referencial — la pantalla real puede variar ligeramente)*
+### 4.2 Crear un Nuevo Stack (método Git)
 
-### 4.2 Crear un Nuevo Stack
+> ⚠️ **Importante:** Use **Git** como método de build, no Web editor. Esto permite que Portainer clone el repositorio y use los archivos locales (`nginx.conf`, `Dockerfile`, etc.).
 
 1. En el menú izquierdo, haga clic en **Stacks**
 2. Haga clic en el botón azul **"+ Add stack"**
 3. Complete los campos:
-   - **Name:** `almacen`
-   - **Build method:** seleccione **"Web editor"**
 
-### 4.3 Copiar el Stack YML
+| Campo              | Valor                                              |
+|--------------------|----------------------------------------------------|
+| **Name**           | `almacen`                                          |
+| **Build method**   | `Git`                                              |
+| **Repository URL** | `https://github.com/eyner6060-svg/almacen`        |
+| **Reference**      | `master`                                           |
+| **Compose path**   | `docker-compose.yml` (o `deploy/portainer-stack.yml`) |
 
-En el editor web, **copie y pegue** el siguiente contenido:
+Deje **Authentication** desmarcado (el repositorio es público).
 
-```yaml
-# ============================================================
-# Portainer Stack - Sistema de Gestión de Almacén
-# ============================================================
-services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: almacen-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: almacen_db
-      PGDATA: /var/lib/postgresql/data/pgdata
-    ports:
-      - "127.0.0.1:5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d almacen_db"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    networks:
-      - almacen-network
+### 4.3 Elegir el archivo Compose
 
-  redis:
-    image: redis:7-alpine
-    container_name: almacen-redis
-    restart: unless-stopped
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
-    ports:
-      - "127.0.0.1:6379:6379"
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - almacen-network
+Tiene dos opciones:
 
-  almacen-app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: sistema-almacen
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:3000:3000"
-    environment:
-      NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/almacen_db?schema=public
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
-      SESSION_SECRET: ${SESSION_SECRET}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
-      NEXT_PUBLIC_APP_URL: ${APP_URL}
-      NEXT_TELEMETRY_DISABLED: 1
-    volumes:
-      - almacen-uploads:/app/public/uploads
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/config"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    networks:
-      - almacen-network
+| Archivo | Cuándo usarlo |
+|---------|--------------|
+| `docker-compose.yml` | Usa el `build` para construir la imagen desde el Dockerfile. Requiere que los archivos `nginx.conf` y `ssl/` estén en `/opt/almacen` del servidor. |
+| `deploy/portainer-stack.yml` | Similar al anterior pero optimizado para Portainer (variables separadas explícitamente). |
 
-  nginx:
-    image: nginx:alpine
-    container_name: almacen-nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ssl-certs:/etc/nginx/ssl:ro
-    depends_on:
-      - almacen-app
-    networks:
-      - almacen-network
-
-volumes:
-  postgres-data:
-    driver: local
-  redis-data:
-    driver: local
-  almacen-uploads:
-    driver: local
-  ssl-certs:
-    driver: local
-
-networks:
-  almacen-network:
-    driver: bridge
-```
+Para empezar, use **`deploy/portainer-stack.yml`**.
 
 ### 4.4 Configurar Variables de Entorno
 
-En la sección **"Environment variables"** (debajo del editor), agregue las siguientes variables **una por una** haciendo clic en **"Add environment variable"**:
+En la sección **"Environment variables"** (debajo del editor), agregue las siguientes variables **una por una**:
 
-| Variable            | Valor                                                         | ¿Cómo generarlo?                          |
-|---------------------|---------------------------------------------------------------|-------------------------------------------|
-| `POSTGRES_USER`     | `dtel`                                                        | Fijo                                      |
-| `POSTGRES_PASSWORD` | `[TU_CONTRASEÑA_SEGURA]`                                      | Genere una contraseña de >30 caracteres   |
-| `REDIS_PASSWORD`    | `[TU_CONTRASEÑA_SEGURA]`                                      | Genere una contraseña de >30 caracteres   |
-| `SESSION_SECRET`    | `[RESULTADO_DE_openssl_rand_base64_32]`                       | `openssl rand -base64 32`                 |
-| `ENCRYPTION_KEY`    | `[RESULTADO_DE_openssl_rand_hex_32]`                          | `openssl rand -hex 32`                    |
-| `APP_URL`           | `http://38.252.209.72`                                        | URL pública del sistema                   |
+> 💡 Consejo: genere las claves desde SSH antes de llenar Portainer:
+> ```bash
+> ssh root@192.168.11.30
+> # (contraseña)
+> openssl rand -base64 32   # para SESSION_SECRET
+> openssl rand -hex 32      # para ENCRYPTION_KEY
+> ```
 
-> **IMPORTANTE:**  
-> - `SESSION_SECRET` debe tener **44 caracteres** (base64).  
-> - `ENCRYPTION_KEY` debe tener **64 caracteres** (hexadecimal, 32 bytes).  
-> - `POSTGRES_PASSWORD` y `REDIS_PASSWORD` no deben contener caracteres que requieran URL-encoding (evite `@`, `:`, `%`, `#`, etc.). Use solo letras, números y guiones.
+| Variable | Valor | ¿Cómo generarlo? |
+|----------|-------|------------------|
+| `POSTGRES_USER` | `dtel` | Fijo |
+| `POSTGRES_PASSWORD` | `[TU_CONTRASEÑA_SEGURA]` | Use una contraseña fuerte (>20 caracteres) |
+| `REDIS_PASSWORD` | `[TU_CONTRASEÑA_SEGURA]` | Use una contraseña fuerte (>20 caracteres) |
+| `SESSION_SECRET` | `[RESULTADO_DE_openssl_rand_base64_32]` | `openssl rand -base64 32` (44 caracteres) |
+| `ENCRYPTION_KEY` | `[RESULTADO_DE_openssl_rand_hex_32]` | `openssl rand -hex 32` (64 caracteres) |
+| `APP_URL` | `http://38.252.209.72` | URL pública del sistema |
+
+> ⚠️ **REGLA DE ORO:**  
+> - `SESSION_SECRET` = 44 caracteres (base64)  
+> - `ENCRYPTION_KEY` = 64 caracteres (hexadecimal)  
+> - `POSTGRES_PASSWORD` y `REDIS_PASSWORD`: solo letras, números y guiones. **Evite** `@`, `:`, `%`, `#`, `&` porque rompen la URL de conexión.
 
 ### 4.5 Desplegar el Stack
 
-1. Revise que todas las variables estén correctamente llenadas
-2. Haga clic en el botón azul **"Deploy the stack"** en la parte inferior
+1. Revise que las 6 variables estén correctamente llenadas
+2. Haga clic en el botón azul **"Deploy the stack"**
 
-![Deploy stack](https://docs.portainer.io/images/deploy_stack.png)
-*(Imagen referencial)*
+El despliegue tomará **3 a 5 minutos** la primera vez:
 
-### 4.6 Progreso del Despliegue
+1. **Portainer clona el repositorio** de GitHub
+2. **Build de `almacen-app`** (multi-stage: instala dependencias, compila Next.js, crea imagen final)
+3. **Descarga imágenes base:** `postgres:16-alpine`, `redis:7-alpine`, `nginx:alpine`
+4. **Inicia contenedores** en orden: postgres → redis → app → nginx
+5. **Healthchecks** verifican que todo funcione
 
-El despliegue tomará aproximadamente **3 a 5 minutos** la primera vez, porque Portainer construirá la imagen Docker de la aplicación (multi-stage build).
+### 4.6 Verificar Logs en Portainer
 
-**¿Qué sucede durante este tiempo?**
+1. **Containers** → seleccione `sistema-almacen`
+2. Pestaña **"Logs"** → "Auto refresh"
 
-1. **Portainer construye la imagen** de `almacen-app` usando el `Dockerfile` del proyecto
-   - Etapa 1: Instala dependencias (pnpm install)
-   - Etapa 2: Compila la aplicación (pnpm run build)
-   - Etapa 3: Crea la imagen final (solo lo necesario)
-2. **Descarga las imágenes base:** `postgres:16-alpine`, `redis:7-alpine`, `nginx:alpine`
-3. **Inicia los contenedores** en orden (postgres → redis → app → nginx)
-4. **Ejecuta healthchecks** para verificar que todo funcione
-
-> **Consejo:** Si el despliegue falla, vaya a **Containers** → seleccione `sistema-almacen` → haga clic en **Logs** para ver el error exacto.
-
-### 4.7 Verificar Logs en Portainer
-
-Para monitorear los logs en tiempo real desde Portainer:
-
-1. **Menú izquierdo** → **Containers**
-2. Haga clic en el nombre del contenedor (ej. `sistema-almacen`)
-3. Vaya a la pestaña **"Logs"**
-4 Seleccione "Fetch" o "Auto refresh"
-
-También puede ver logs vía SSH:
+O desde SSH:
 
 ```bash
-# Logs de todos los contenedores del stack
 docker logs sistema-almacen -f
 docker logs almacen-nginx
 docker logs almacen-postgres
@@ -526,11 +439,11 @@ http://192.168.11.30
 docker ps | grep almacen
 
 # Ejemplo de salida esperada (4 contenedores RUNNING):
-# CONTAINER ID   IMAGE                   STATUS         PORTS                    NAMES
-# abc123...      nginx:alpine            Up 2 minutes   0.0.0.0:80->80/tcp,...   almacen-nginx
-# def456...      almacen_app:latest      Up 3 minutes   127.0.0.1:3000->3000...  sistema-almacen
-# ghi789...      redis:7-alpine          Up 3 minutes   127.0.0.1:6379->6379...  almacen-redis
-# jkl012...      postgres:16-alpine      Up 4 minutes   127.0.0.1:5432->5432...  almacen-postgres
+# CONTAINER ID   IMAGE                   STATUS         PORTS                          NAMES
+# abc123...      nginx:alpine            Up 2 minutes   0.0.0.0:80->80/tcp, 443->443  almacen-nginx
+# def456...      almacen-app:latest      Up 3 minutes   127.0.0.1:3000->3000/tcp       sistema-almacen
+# ghi789...      redis:7-alpine          Up 3 minutes   127.0.0.1:6379->6379/tcp       almacen-redis
+# jkl012...      postgres:16-alpine      Up 4 minutes   127.0.0.1:5432->5432/tcp       almacen-postgres
 ```
 
 ### 6.4 Verificar Puertos Abiertos
@@ -699,9 +612,13 @@ docker restart sistema-almacen
 ls -la /opt/almacen/ssl/
 
 # 2. Si no existen, generarlos
-bash /opt/almacen/deploy/gen-ssl-certs.sh
+mkdir -p /opt/almacen/ssl
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /opt/almacen/ssl/key.pem \
+  -out /opt/almacen/ssl/cert.pem \
+  -subj "/C=PE/ST=Lima/L=Lima/O=DTEL/CN=dtel-almacen.local"
 
-# Si persiste, use solo HTTP:
+# 3. Si persiste, use solo HTTP:
 cp /opt/almacen/deploy/nginx.deploy.conf /opt/almacen/nginx.conf
 docker restart almacen-nginx
 ```
@@ -758,7 +675,7 @@ ssh root@192.168.11.30
 cd /opt/almacen
 
 # 3. Obtener los últimos cambios
-git pull origin main
+git pull origin master
 
 # 4. Ir a Portainer → Stacks → almacen → "Editor"
 # 5. Haga clic en "Deploy" (sin modificar nada, redeploya con los nuevos archivos)
@@ -791,14 +708,17 @@ docker logs almacen-nginx -f
 ### 9.3 Backup de Base de Datos
 
 ```bash
-# Backup completo (ejecutar vía SSH)
-docker exec almacen-postgres pg_dump -U dtel almacen_db > /opt/almacen/backup_$(date +%Y%m%d_%H%M%S).sql
+# Crear directorio de backups
+mkdir -p /opt/almacen/backups
+
+# Backup completo
+docker exec almacen-postgres pg_dump -U ${POSTGRES_USER:-dtel} almacen_db > /opt/almacen/backups/backup_$(date +%Y%m%d_%H%M%S).sql
 
 # Restaurar backup
-cat backup.sql | docker exec -i almacen-postgres psql -U dtel almacen_db
+cat /opt/almacen/backups/backup.sql | docker exec -i almacen-postgres psql -U ${POSTGRES_USER:-dtel} almacen_db
 
-# Backup automático (cron diario)
-echo "0 3 * * * root docker exec almacen-postgres pg_dump -U dtel almacen_db > /opt/almacen/backups/backup_$(date +\%Y\%m\%d).sql" > /etc/cron.d/almacen-backup
+# Backup automático diario (3:00 AM)
+echo "0 3 * * * root docker exec almacen-postgres pg_dump -U dtel almacen_db > /opt/almacen/backups/backup_\$(date +\%Y\%m\%d).sql" > /etc/cron.d/almacen-backup
 ```
 
 ### 9.4 Ver Espacio en Disco
