@@ -55,7 +55,7 @@ services:
 
   almacen-app:
     build:
-      context: .
+      context: ../
       dockerfile: Dockerfile
     container_name: sistema-almacen
     restart: unless-stopped
