@@ -134,7 +134,10 @@ export function BienesAsignadosModule() {
     if (!ctx) return
     const rect = canvas.getBoundingClientRect()
     ctx.beginPath()
-    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top)
+    ctx.moveTo(
+      (e.clientX - rect.left) * (canvas.width / rect.width),
+      (e.clientY - rect.top) * (canvas.height / rect.height)
+    )
     canvas.setAttribute('data-drawing', 'true')
   }
 
@@ -144,10 +147,13 @@ export function BienesAsignadosModule() {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     const rect = canvas.getBoundingClientRect()
-    ctx.lineWidth = 2.5
+    ctx.lineWidth = 2.5 * (canvas.width / rect.width)
     ctx.lineCap = 'round'
     ctx.strokeStyle = '#2563eb'
-    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top)
+    ctx.lineTo(
+      (e.clientX - rect.left) * (canvas.width / rect.width),
+      (e.clientY - rect.top) * (canvas.height / rect.height)
+    )
     ctx.stroke()
   }
 
@@ -164,7 +170,10 @@ export function BienesAsignadosModule() {
     const touch = e.touches[0]
     if (!touch) return
     ctx.beginPath()
-    ctx.moveTo(touch.clientX - rect.left, touch.clientY - rect.top)
+    ctx.moveTo(
+      (touch.clientX - rect.left) * (canvas.width / rect.width),
+      (touch.clientY - rect.top) * (canvas.height / rect.height)
+    )
     canvas.setAttribute('data-drawing', 'true')
   }
 
@@ -176,10 +185,13 @@ export function BienesAsignadosModule() {
     const rect = canvas.getBoundingClientRect()
     const touch = e.touches[0]
     if (!touch) return
-    ctx.lineWidth = 2.5
+    ctx.lineWidth = 2.5 * (canvas.width / rect.width)
     ctx.lineCap = 'round'
     ctx.strokeStyle = '#2563eb'
-    ctx.lineTo(touch.clientX - rect.left, touch.clientY - rect.top)
+    ctx.lineTo(
+      (touch.clientX - rect.left) * (canvas.width / rect.width),
+      (touch.clientY - rect.top) * (canvas.height / rect.height)
+    )
     ctx.stroke()
   }
 

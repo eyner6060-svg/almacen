@@ -97,6 +97,7 @@ export function PedidosModule() {
       daysOverdue: number
     }> = []
 
+    // eslint-disable-next-line react-hooks/purity
     const now = Date.now()
     for (const order of orders) {
       if (order.status !== 'COMPLETADO') continue
@@ -334,6 +335,7 @@ export function PedidosModule() {
         order={selectedOrder}
         user={user}
         onActionComplete={() => invalidate([queryKeys.orders])}
+        onOrderUpdated={(updated) => setSelectedOrder(updated)}
       />
 
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>

@@ -19,9 +19,10 @@ interface OrderViewDialogProps {
   order: Order | null
   user: User | null
   onActionComplete: () => void
+  onOrderUpdated?: (order: Order) => void
 }
 
-export function OrderViewDialog({ open, onOpenChange, order, user, onActionComplete }: OrderViewDialogProps) {
+export function OrderViewDialog({ open, onOpenChange, order, user, onActionComplete, onOrderUpdated }: OrderViewDialogProps) {
   const { config } = useConfigStore()
 
   if (!order) return null
@@ -110,6 +111,7 @@ export function OrderViewDialog({ open, onOpenChange, order, user, onActionCompl
               user={user}
               config={config}
               onActionComplete={onActionComplete}
+              onOrderUpdated={onOrderUpdated}
               onDialogClose={() => onOpenChange(false)}
             />
           </div>

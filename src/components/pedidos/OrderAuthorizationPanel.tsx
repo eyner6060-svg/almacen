@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -21,6 +21,7 @@ import { DocumentViewerModal } from '@/components/ui/document-viewer-modal'
 import { getCurrentYearDenomination } from '@/lib/year-denomination'
 import { downloadOrderDeliveryDocx } from '@/lib/order-docx'
 import { isDnieAvailable, signWithDnie, type DnieSignMethod } from '@/lib/dnie'
+import { fetchUserSignature } from '@/lib/delivery-doc'
 
 interface OrderAuthorizationPanelProps {
   order: Order
@@ -28,6 +29,7 @@ interface OrderAuthorizationPanelProps {
   config: SystemConfig | null
   onActionComplete: () => void
   onDialogClose: () => void
+  onOrderUpdated?: (order: Order) => void
 }
 
 function escapeHtml(str: string | null | undefined): string {
@@ -36,7 +38,7 @@ function escapeHtml(str: string | null | undefined): string {
     .replace(/"/g, '&quot;').replace(/'/g, '&#039;')
 }
 
-export function OrderAuthorizationPanel({ order, user, config, onActionComplete, onDialogClose }: OrderAuthorizationPanelProps) {
+export function OrderAuthorizationPanel({ order, user, config, onActionComplete, onDialogClose, onOrderUpdated }: OrderAuthorizationPanelProps) {
   const { updateOrder } = useOrdersStore()
 
   const [isProcessing, setIsProcessing] = useState(false)
@@ -85,7 +87,10 @@ export function OrderAuthorizationPanel({ order, user, config, onActionComplete,
       clientY = e.clientY
     }
     ctx.beginPath()
-    ctx.moveTo(clientX - rect.left, clientY - rect.top)
+    ctx.moveTo(
+      (clientX - rect.left) * (canvas.width / rect.width),
+      (clientY - rect.top) * (canvas.height / rect.height)
+    )
   }, [])
 
   const draw = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -105,9 +110,12 @@ export function OrderAuthorizationPanel({ order, user, config, onActionComplete,
       clientX = e.clientX
       clientY = e.clientY
     }
-    ctx.lineTo(clientX - rect.left, clientY - rect.top)
+    ctx.lineTo(
+      (clientX - rect.left) * (canvas.width / rect.width),
+      (clientY - rect.top) * (canvas.height / rect.height)
+    )
     ctx.strokeStyle = config?.primaryColor || '#1e40af'
-    ctx.lineWidth = 2.5
+    ctx.lineWidth = 2.5 * (canvas.width / rect.width)
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
     ctx.stroke()
@@ -125,6 +133,24 @@ export function OrderAuthorizationPanel({ order, user, config, onActionComplete,
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     setHasSignature(false)
   }, [])
+
+  useEffect(() => {
+    if (!signDialogOpen || !user || signMethod !== 'MANUSCRITA') return
+    fetchUserSignature(user.id).then(sig => {
+      if (!sig) return
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      const img = new Image()
+      img.onload = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        setHasSignature(true)
+      }
+      img.src = sig
+    })
+  }, [signDialogOpen, signMethod, user])
 
   const canAuthorizeJefe = () => {
     if (!order || !user) return false
@@ -180,6 +206,7 @@ export function OrderAuthorizationPanel({ order, user, config, onActionComplete,
 
       if (response.ok) {
         updateOrder(order.id, data.order)
+        onOrderUpdated?.(data.order)
         setPinDialogOpen(false)
         setAuthorizationPin('')
         setAuthorizationAction(null)
@@ -291,9 +318,11 @@ export function OrderAuthorizationPanel({ order, user, config, onActionComplete,
         })
 
         if (updateResponse.ok) {
+          const updated = await updateResponse.json()
           toast.success('PDF firmado subido correctamente')
           setUploadPdfDialogOpen(false)
           setSignedPdfFile(null)
+          if (updated.order) onOrderUpdated?.(updated.order)
           onActionComplete()
         } else {
           toast.error('Error al guardar el PDF')
@@ -633,6 +662,7 @@ export function OrderAuthorizationPanel({ order, user, config, onActionComplete,
         setSignDialogOpen(false)
         setHasSignature(false)
         updateOrder(order.id, { ...order, signedPdfUrl: data.url, pdfUrl: data.url })
+        onOrderUpdated?.({ ...order, signedPdfUrl: data.url, pdfUrl: data.url })
         toast.success(signMethod === 'DNIE'
           ? '✓ Documento firmado con DNI Electrónico y registrado.'
           : '✓ Documento firmado y registrado correctamente.')
@@ -763,6 +793,14 @@ export function OrderAuthorizationPanel({ order, user, config, onActionComplete,
                 >
                   <Check className="h-4 w-4 mr-2" />
                   Confirmar Entrega
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={openSignDialog}
+                  title="Firmar el documento de salida digitalmente"
+                >
+                  <Signature className="h-4 w-4 mr-2" />
+                  Firmar Documento
                 </Button>
                 <Button
                   variant="outline"

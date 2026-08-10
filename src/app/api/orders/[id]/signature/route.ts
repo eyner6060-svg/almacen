@@ -24,8 +24,8 @@ export async function POST(
     if (!order) {
       return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 })
     }
-    if (order.status !== 'COMPLETADO') {
-      return NextResponse.json({ error: 'El pedido debe estar COMPLETADO para firmar el documento de salida' }, { status: 400 })
+    if (order.status !== 'COMPLETADO' && order.status !== 'AUTORIZADO_ALMACENERO') {
+      return NextResponse.json({ error: 'El pedido debe estar preparado (AUTORIZADO_ALMACENERO) o COMPLETADO para firmar el documento de salida' }, { status: 400 })
     }
 
     const body = await request.json()
