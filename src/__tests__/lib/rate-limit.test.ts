@@ -7,9 +7,9 @@ function uniqueId(): string {
 }
 
 describe('RateLimitPresets', () => {
-  it('LOGIN permite 5 intentos en 15 min', () => {
+  it('LOGIN permite 5 intentos en 3 min', () => {
     expect(RateLimitPresets.LOGIN.maxRequests).toBe(5)
-    expect(RateLimitPresets.LOGIN.windowMs).toBe(15 * 60 * 1000)
+    expect(RateLimitPresets.LOGIN.windowMs).toBe(3 * 60 * 1000)
   })
 
   it('API permite 100 requests por minuto', () => {

@@ -11,7 +11,7 @@ async function getRecentFailures(userId: number, lockoutMinutes: number): Promis
   })
 }
 
-export async function checkPinAttempt(userId: number, maxAttempts: number, lockoutMinutes = 15): Promise<{
+export async function checkPinAttempt(userId: number, maxAttempts: number, lockoutMinutes = 3): Promise<{
   allowed: boolean
   remaining: number
   locked: boolean
@@ -19,12 +19,13 @@ export async function checkPinAttempt(userId: number, maxAttempts: number, locko
 }> {
   const recentFailures = await getRecentFailures(userId, lockoutMinutes)
   const locked = recentFailures >= maxAttempts
+  const lockedUntil = locked ? Date.now() + lockoutMinutes * 60 * 1000 : null
 
   return {
     allowed: !locked,
     remaining: Math.max(0, maxAttempts - recentFailures),
     locked,
-    lockedUntil: null,
+    lockedUntil,
   }
 }
 
@@ -43,11 +44,12 @@ export async function recordFailedPinAttempt(userId: number, maxAttempts: number
 
   const recentFailures = await getRecentFailures(userId, lockoutMinutes)
   const locked = recentFailures >= maxAttempts
+  const lockedUntil = locked ? Date.now() + lockoutMinutes * 60 * 1000 : null
 
   return {
     remaining: Math.max(0, maxAttempts - recentFailures),
     locked,
-    lockedUntil: null,
+    lockedUntil,
   }
 }
 

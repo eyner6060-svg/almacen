@@ -24,22 +24,25 @@ export function Providers({ children, initialConfig }: ProvidersProps) {
   useEffect(() => {
     try { initSyncService() } catch { /* error de inicio no fatal */ }
 
+    // Aplicar config inicial de SSR como primer valor (evita parpadeo),
+    // pero SIEMPRE re-fetch desde el servidor para garantizar datos frescos,
+    // ya que el HTML del layout puede estar cacheado con valores antiguos.
     if (initialConfig) {
       setConfig(initialConfig)
-    } else {
-      const retry = (attempt: number) => {
-        fetch('/api/config')
-          .then(res => res.json())
-          .then((data: { config: SystemConfig }) => {
-            if (data.config) setConfig(data.config)
-          })
-          .catch((err) => {
-            console.error('Error fetching config (attempt', attempt, '):', err)
-            if (attempt < 3) setTimeout(() => retry(attempt + 1), 1000 * attempt)
-          })
-      }
-      retry(1)
     }
+
+    const retry = (attempt: number) => {
+      fetch(`/api/config?_t=${Date.now()}`)
+        .then(res => res.json())
+        .then((data: { config: SystemConfig }) => {
+          if (data.config) setConfig(data.config)
+        })
+        .catch((err) => {
+          console.error('Error fetching config (attempt', attempt, '):', err)
+          if (attempt < 3) setTimeout(() => retry(attempt + 1), 1000 * attempt)
+        })
+    }
+    retry(1)
 
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission().catch(() => {})

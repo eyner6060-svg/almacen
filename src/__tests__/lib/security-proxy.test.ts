@@ -98,10 +98,10 @@ describe('Encryption - Seguridad', () => {
 })
 
 describe('Rate limiting - Seguridad', () => {
-  it('login tiene limite de 5 intentos por 15 min', async () => {
+  it('login tiene limite de 5 intentos por 3 min', async () => {
     const rateLimit = await import('@/lib/rate-limit')
     expect(rateLimit.RateLimitPresets.LOGIN.maxRequests).toBe(5)
-    expect(rateLimit.RateLimitPresets.LOGIN.windowMs).toBe(15 * 60 * 1000)
+    expect(rateLimit.RateLimitPresets.LOGIN.windowMs).toBe(3 * 60 * 1000)
   })
 
   it('API tiene limite de 100 requests por minuto', async () => {

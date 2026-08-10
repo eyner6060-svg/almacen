@@ -10,8 +10,8 @@ const SESSION_TOKEN_COOKIE = 'session_token'
 const SESSION_EXPIRY_HOURS = 8
 const INACTIVITY_TIMEOUT_MINUTES = 30
 const MAX_LOGIN_ATTEMPTS = 5
-const LOCKOUT_DURATION_MINUTES = 15
-const LOGIN_WINDOW_MS = 15 * 60 * 1000
+const LOCKOUT_DURATION_MINUTES = 3
+const LOGIN_WINDOW_MS = 3 * 60 * 1000
 
 // Validar email
 export function isValidEmail(email: string): boolean {

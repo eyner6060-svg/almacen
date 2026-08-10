@@ -256,7 +256,7 @@ export async function PUT(request: NextRequest) {
       if (currentUser.role === 'ALMACENERO' || currentUser.role === 'JEFE_OFICINA') {
         const config = await cacheGetOrSet(CacheKeys.systemConfig(), () => db.systemConfig.findFirst({ where: { id: 1 } }), { ttl: CacheTTL.LONG })
         const maxAttempts = config?.maxPinAttempts ?? 5
-        const lockoutMinutes = config?.pinLockoutMinutes ?? 15
+        const lockoutMinutes = config?.pinLockoutMinutes ?? 3
         if (!pin || pin.length !== 4) {
           return NextResponse.json({ error: 'Debe ingresar su PIN de 4 dígitos.' }, { status: 400 })
         }

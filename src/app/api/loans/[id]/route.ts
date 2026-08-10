@@ -6,6 +6,8 @@ import { checkPinAttempt, recordFailedPinAttempt, resetPinAttempts } from '@/lib
 import { cacheGetOrSet, CacheKeys, CacheTTL } from '@/lib/cache'
 import bcrypt from 'bcryptjs'
 
+const PIN_LOCKOUT_MINUTES = 3
+
 async function getLoan(id: number) {
   return db.loan.findUnique({
     where: { id },
@@ -59,7 +61,7 @@ export const PUT = apiHandler(async (request: NextRequest, user) => {
   async function validateLoanPin(pinInput: string | undefined): Promise<{ valid: boolean; remaining: number; locked: boolean; lockedUntil: number | null }> {
     const config = await cacheGetOrSet(CacheKeys.systemConfig(), () => db.systemConfig.findFirst({ where: { id: 1 } }), { ttl: CacheTTL.LONG })
     const maxAttempts = config?.maxPinAttempts || 5
-    const lockoutMinutes = config?.pinLockoutMinutes || 15
+    const lockoutMinutes = config?.pinLockoutMinutes || 3
 
     const attemptCheck = await checkPinAttempt(userId, maxAttempts, lockoutMinutes)
     if (attemptCheck.locked) {
@@ -98,7 +100,7 @@ export const PUT = apiHandler(async (request: NextRequest, user) => {
       const pinResult = await validateLoanPin(pin)
       if (!pinResult.valid) {
         if (pinResult.locked) {
-          const minsLeft = pinResult.lockedUntil ? Math.ceil((pinResult.lockedUntil - Date.now()) / 60000) : 15
+          const minsLeft = pinResult.lockedUntil ? Math.ceil((pinResult.lockedUntil - Date.now()) / 60000) : PIN_LOCKOUT_MINUTES
           return NextResponse.json({ error: `Cuenta bloqueada por ${minsLeft} minutos.`, locked: true, lockedUntil: pinResult.lockedUntil }, { status: 403 })
         }
         return NextResponse.json({ error: 'PIN incorrecto.', remainingAttempts: pinResult.remaining }, { status: 403 })
@@ -130,7 +132,7 @@ export const PUT = apiHandler(async (request: NextRequest, user) => {
       const pinResultJefe = await validateLoanPin(pin)
       if (!pinResultJefe.valid) {
         if (pinResultJefe.locked) {
-          const minsLeft = pinResultJefe.lockedUntil ? Math.ceil((pinResultJefe.lockedUntil - Date.now()) / 60000) : 15
+          const minsLeft = pinResultJefe.lockedUntil ? Math.ceil((pinResultJefe.lockedUntil - Date.now()) / 60000) : PIN_LOCKOUT_MINUTES
           return NextResponse.json({ error: `Cuenta bloqueada por ${minsLeft} minutos.`, locked: true, lockedUntil: pinResultJefe.lockedUntil }, { status: 403 })
         }
         return NextResponse.json({ error: 'PIN incorrecto.', remainingAttempts: pinResultJefe.remaining }, { status: 403 })
@@ -162,7 +164,7 @@ export const PUT = apiHandler(async (request: NextRequest, user) => {
       const pinResultConfirm = await validateLoanPin(pin)
       if (!pinResultConfirm.valid) {
         if (pinResultConfirm.locked) {
-          const minsLeft = pinResultConfirm.lockedUntil ? Math.ceil((pinResultConfirm.lockedUntil - Date.now()) / 60000) : 15
+          const minsLeft = pinResultConfirm.lockedUntil ? Math.ceil((pinResultConfirm.lockedUntil - Date.now()) / 60000) : PIN_LOCKOUT_MINUTES
           return NextResponse.json({ error: `Cuenta bloqueada por ${minsLeft} minutos.`, locked: true, lockedUntil: pinResultConfirm.lockedUntil }, { status: 403 })
         }
         return NextResponse.json({ error: 'PIN incorrecto.', remainingAttempts: pinResultConfirm.remaining }, { status: 403 })
@@ -205,7 +207,7 @@ export const PUT = apiHandler(async (request: NextRequest, user) => {
       const pinResultReturn = await validateLoanPin(pin)
       if (!pinResultReturn.valid) {
         if (pinResultReturn.locked) {
-          const minsLeft = pinResultReturn.lockedUntil ? Math.ceil((pinResultReturn.lockedUntil - Date.now()) / 60000) : 15
+          const minsLeft = pinResultReturn.lockedUntil ? Math.ceil((pinResultReturn.lockedUntil - Date.now()) / 60000) : PIN_LOCKOUT_MINUTES
           return NextResponse.json({ error: `Cuenta bloqueada por ${minsLeft} minutos.`, locked: true, lockedUntil: pinResultReturn.lockedUntil }, { status: 403 })
         }
         return NextResponse.json({ error: 'PIN incorrecto.', remainingAttempts: pinResultReturn.remaining }, { status: 403 })

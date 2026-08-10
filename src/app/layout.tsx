@@ -6,6 +6,11 @@ import { Providers } from "@/components/providers";
 import "@/lib/jobs-init";
 import type { SystemConfig } from "@/types";
 
+// Garantizar que la configuración del sistema se lea de la base de datos
+// en cada petición (no en build), para que los cambios de color/logo/nombre
+// se apliquen al recargar o abrir desde otro navegador sin visitar CONFIGURACIÓN.
+export const dynamic = "force-dynamic";
+
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,

@@ -4,9 +4,11 @@ import { getCurrentUser } from '@/lib/auth'
 import bcrypt from 'bcryptjs'
 import { OrderStatus, Role, Prisma } from '@prisma/client'
 import { logger } from '@/lib/logger'
-import { cacheDelete, cacheGetOrSet, CacheKeys, CacheTTL } from '@/lib/cache'
+import { cacheDelete, cacheGetOrSet, cacheDeletePattern, CacheKeys, CacheTTL } from '@/lib/cache'
 import { checkPinAttempt, recordFailedPinAttempt, resetPinAttempts } from '@/lib/pin-attempts'
 import { logAuthorization, logRejection, logAudit } from '@/lib/audit'
+
+const PIN_LOCKOUT_MINUTES = 3
 
 
 export async function GET(
@@ -26,7 +28,7 @@ export async function GET(
         requestedBy: { select: { id: true, fullName: true, dni: true, email: true, phone: true, position: true, role: true, office: { select: { id: true, name: true, code: true } } } },
         office: { select: { id: true, name: true, code: true } },
         items: {
-          include: { item: { select: { id: true, name: true, code: true, model: true, brand: true, category: true, unit: true, itemType: true, status: true, location: true, warehouse: { select: { id: true, name: true } } } } }
+          include: { item: { select: { id: true, name: true, code: true, model: true, brand: true, color: true, category: true, unit: true, itemType: true, status: true, location: true, warehouse: { select: { id: true, name: true } } } } }
         },
         authorizations: {
           include: { user: { select: { id: true, fullName: true, role: true } } },
@@ -59,7 +61,7 @@ const ORDER_DETAIL_INCLUDE = {
   requestedBy: { select: { id: true, fullName: true, dni: true, email: true, phone: true, position: true, role: true, office: { select: { id: true, name: true, code: true } } } },
   office: { select: { id: true, name: true, code: true } },
   items: {
-    include: { item: { select: { id: true, name: true, code: true, model: true, brand: true, category: true, unit: true, itemType: true, status: true, location: true, quantity: true, minStock: true, warehouse: { select: { id: true, name: true } } } }, patrimonialUnit: { select: { id: true, patrimonialCode: true, status: true, isAvailable: true } } }
+    include: { item: { select: { id: true, name: true, code: true, model: true, brand: true, color: true, category: true, unit: true, itemType: true, status: true, location: true, quantity: true, minStock: true, warehouse: { select: { id: true, name: true } } } }, patrimonialUnit: { select: { id: true, patrimonialCode: true, status: true, isAvailable: true } } }
   },
   authorizations: {
     include: { user: { select: { id: true, fullName: true, role: true } } },
@@ -96,7 +98,7 @@ export async function PUT(
 
       const config = await cacheGetOrSet(CacheKeys.systemConfig(), () => db.systemConfig.findFirst(), { ttl: CacheTTL.LONG })
       const maxAttempts = config?.maxPinAttempts ?? 5
-      const lockoutMinutes = config?.pinLockoutMinutes ?? 15
+      const lockoutMinutes = config?.pinLockoutMinutes ?? 3
 
       const attempt = await checkPinAttempt(user.id, maxAttempts)
       if (attempt.locked) {
@@ -127,7 +129,7 @@ export async function PUT(
       const pinResult = await validatePin(pin)
       if (!pinResult.valid) {
         if (pinResult.locked) {
-          const minsLeft = pinResult.lockedUntil ? Math.ceil((pinResult.lockedUntil - Date.now()) / 60000) : 15
+          const minsLeft = pinResult.lockedUntil ? Math.ceil((pinResult.lockedUntil - Date.now()) / 60000) : PIN_LOCKOUT_MINUTES
           return NextResponse.json({
             error: `Demasiados intentos fallidos. Su cuenta ha sido bloqueada por ${minsLeft} minutos.`,
             remainingAttempts: 0,
@@ -220,7 +222,7 @@ export async function PUT(
       const pinResult = await validatePin(pin)
       if (!pinResult.valid) {
         if (pinResult.locked) {
-          const minsLeft = pinResult.lockedUntil ? Math.ceil((pinResult.lockedUntil - Date.now()) / 60000) : 15
+          const minsLeft = pinResult.lockedUntil ? Math.ceil((pinResult.lockedUntil - Date.now()) / 60000) : PIN_LOCKOUT_MINUTES
           return NextResponse.json({
             error: `Demasiados intentos fallidos. Su cuenta ha sido bloqueada por ${minsLeft} minutos.`,
             remainingAttempts: 0,
@@ -315,7 +317,7 @@ export async function PUT(
       const pinResult = await validatePin(pin)
       if (!pinResult.valid) {
         if (pinResult.locked) {
-          const minsLeft = pinResult.lockedUntil ? Math.ceil((pinResult.lockedUntil - Date.now()) / 60000) : 15
+          const minsLeft = pinResult.lockedUntil ? Math.ceil((pinResult.lockedUntil - Date.now()) / 60000) : PIN_LOCKOUT_MINUTES
           return NextResponse.json({
             error: `Demasiados intentos fallidos. Su cuenta ha sido bloqueada por ${minsLeft} minutos.`,
             remainingAttempts: 0,
@@ -375,6 +377,13 @@ export async function PUT(
             error: `Error de stock: No hay suficiente cantidad de "${orderItem.item.name}".` 
           }, { status: 400 })
         }
+
+        // Para bienes patrimoniales, verificar que la unidad aún esté disponible
+        if (orderItem.patrimonialUnitId && (!orderItem.patrimonialUnit || !orderItem.patrimonialUnit.isAvailable)) {
+          return NextResponse.json({ 
+            error: `La unidad patrimonial "${orderItem.patrimonialUnit?.patrimonialCode || ''}" ya no está disponible para entrega.` 
+          }, { status: 400 })
+        }
       }
 
       // Descontar stock y actualizar estado (transaccional)
@@ -384,6 +393,38 @@ export async function PUT(
           date.setDate(date.getDate() + 15)
           return date
         })()
+
+        // Re-leer stock fresco dentro de la transacción para evitar descuentos
+        // basados en datos en caché o pedidos concurrentes
+        const freshItems = await tx.item.findMany({
+          where: { id: { in: order.items.map(oi => oi.itemId) } },
+          select: { id: true, quantity: true, name: true }
+        })
+        const freshItemsMap = new Map(freshItems.map(i => [i.id, i]))
+
+        const puIds = order.items
+          .filter(oi => oi.patrimonialUnitId)
+          .map(oi => oi.patrimonialUnitId!)
+        const freshPUs = puIds.length > 0
+          ? await tx.patrimonialUnit.findMany({
+              where: { id: { in: puIds } },
+              select: { id: true, isAvailable: true, patrimonialCode: true }
+            })
+          : []
+        const freshPUsMap = new Map(freshPUs.map(u => [u.id, u]))
+
+        for (const orderItem of order.items) {
+          const item = freshItemsMap.get(orderItem.itemId)
+          if (!item || item.quantity < orderItem.quantity) {
+            throw new Error(`Stock insuficiente para "${orderItem.item.name}" al momento de la entrega`)
+          }
+          if (orderItem.patrimonialUnitId) {
+            const pu = freshPUsMap.get(orderItem.patrimonialUnitId)
+            if (!pu || !pu.isAvailable) {
+              throw new Error(`La unidad patrimonial "${pu?.patrimonialCode || ''}" ya no está disponible`)
+            }
+          }
+        }
 
         await Promise.all(order.items.map(orderItem => {
           const updates: Promise<unknown>[] = [
@@ -484,6 +525,13 @@ export async function PUT(
       })
 
       await logAudit({ userId: currentUser.id, action: 'STATUS_CHANGE', entityType: 'Order', entityId: parseInt(id), description: `Entrega confirmada - Pedido ${order.orderNumber}` })
+
+      // Invalidar cachés para reflejar el nuevo stock y estado
+      await Promise.all([
+        cacheDelete(`order:detail:${id}`),
+        cacheDelete(CacheKeys.order(parseInt(id))),
+        cacheDeletePattern('items:list:'),
+      ])
 
       return NextResponse.json({ 
         order: updatedOrder,
@@ -671,6 +719,13 @@ export async function PUT(
     ])
     return NextResponse.json({ order })
   } catch (error) {
+    // Errores de validación de stock lanzados dentro de la transacción de entrega
+    if (error instanceof Error && (
+      error.message.startsWith('Stock insuficiente') ||
+      error.message.startsWith('La unidad patrimonial')
+    )) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
     logger.error('Update order error:', error)
     return NextResponse.json({ error: 'Error al actualizar pedido' }, { status: 500 })
   }

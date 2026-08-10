@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import {
   CheckCircle, XCircle, Clock, UserCheck, PackageCheck, Check,
   Package, FileText, Download, FileUp, MapPin, Calendar,
-  Upload, Shield
+  Upload, Shield, Signature, Eraser, Fingerprint, PenLine
 } from 'lucide-react'
 import type { Order, Item, User, SystemConfig } from '@/types'
 import { toast } from 'sonner'
@@ -19,6 +19,8 @@ import { apiFetch } from '@/lib/http'
 import { useOrdersStore } from '@/store'
 import { DocumentViewerModal } from '@/components/ui/document-viewer-modal'
 import { getCurrentYearDenomination } from '@/lib/year-denomination'
+import { downloadOrderDeliveryDocx } from '@/lib/order-docx'
+import { isDnieAvailable, signWithDnie, type DnieSignMethod } from '@/lib/dnie'
 
 interface OrderAuthorizationPanelProps {
   order: Order
@@ -56,6 +58,73 @@ export function OrderAuthorizationPanel({ order, user, config, onActionComplete,
   const [isLocked, setIsLocked] = useState(false)
   const [lockedMessage, setLockedMessage] = useState('')
   const defaultReturnDays = 15
+  const [signDialogOpen, setSignDialogOpen] = useState(false)
+  const [isSigning, setIsSigning] = useState(false)
+  const [signMethod, setSignMethod] = useState<DnieSignMethod>('MANUSCRITA')
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [isDrawing, setIsDrawing] = useState(false)
+  const [hasSignature, setHasSignature] = useState(false)
+  const [dnieAvailable] = useState<boolean>(() => (typeof window !== 'undefined' ? isDnieAvailable() : false))
+
+  const startDrawing = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    setIsDrawing(true)
+    setHasSignature(true)
+    const rect = canvas.getBoundingClientRect()
+    let clientX: number, clientY: number
+    if ('touches' in e) {
+      const touch = e.touches[0]
+      if (!touch) return
+      clientX = touch.clientX
+      clientY = touch.clientY
+    } else {
+      clientX = e.clientX
+      clientY = e.clientY
+    }
+    ctx.beginPath()
+    ctx.moveTo(clientX - rect.left, clientY - rect.top)
+  }, [])
+
+  const draw = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const rect = canvas.getBoundingClientRect()
+    let clientX: number, clientY: number
+    if ('touches' in e) {
+      const touch = e.touches[0]
+      if (!touch) return
+      clientX = touch.clientX
+      clientY = touch.clientY
+    } else {
+      clientX = e.clientX
+      clientY = e.clientY
+    }
+    ctx.lineTo(clientX - rect.left, clientY - rect.top)
+    ctx.strokeStyle = config?.primaryColor || '#1e40af'
+    ctx.lineWidth = 2.5
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.stroke()
+  }, [isDrawing, config])
+
+  const stopDrawing = useCallback(() => {
+    setIsDrawing(false)
+  }, [])
+
+  const clearSignatureCanvas = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    setHasSignature(false)
+  }, [])
 
   const canAuthorizeJefe = () => {
     if (!order || !user) return false
@@ -277,7 +346,7 @@ export function OrderAuthorizationPanel({ order, user, config, onActionComplete,
     }
   }
 
-  const generatePdfContent = (order: Order) => {
+  const generatePdfContent = (order: Order, signature?: { dataUrl?: string; signerName: string; signedAt: string; method: DnieSignMethod }) => {
     const primaryColor = config?.primaryColor || '#1e40af'
     const institutionName = config?.institutionName || 'Almacén Institucional'
     const footerText = config?.footerText || 'Ayacucho, Perú'
@@ -446,9 +515,20 @@ export function OrderAuthorizationPanel({ order, user, config, onActionComplete,
           </div>
           <div style="text-align: center; width: 30%;">
             <p style="margin: 0; font-size: 11px; color: #6b7280;">ENCARGADO DE ALMACÉN</p>
-            <div style="height: 50px; margin: 10px 0;"></div>
+            ${signature ? `
+              <div style="height: 50px; margin: 10px 0; display:flex;align-items:center;justify-content:center;">
+                ${signature.method === 'DNIE'
+        ? `<div style="display:flex;align-items:center;gap:6px;color:#065f46;font-size:10px;font-weight:600;border:1px solid #a7f3d0;background:#ecfdf5;padding:4px 10px;border-radius:8px;">🔐 Firma DNIE (RENIEC)</div>`
+        : `<img src="${signature.dataUrl}" alt="Firma" style="max-height:48px;max-width:120px;" />`}
+              </div>
+            ` : `<div style="height: 50px; margin: 10px 0;"></div>`}
             <div style="border-top: 1px solid #374151; padding-top: 8px;">
-              ${almacenAuth ? `
+              ${signature ? `
+                <p style="margin: 0; font-size: 11px; font-weight: 600;">✓ Firmado digitalmente</p>
+                <p style="margin: 2px 0 0 0; font-size: 10px; color: #6b7280;">${escapeHtml(signature.signerName)}</p>
+                <p style="margin: 2px 0 0 0; font-size: 10px; color: #6b7280;">${signature.method === 'DNIE' ? 'DNI Electrónico (RENIEC)' : 'Firma manuscrita digitalizada'}</p>
+                <p style="margin: 2px 0 0 0; font-size: 10px; color: #6b7280;">${new Date(signature.signedAt).toLocaleDateString('es-PE')} a las ${new Date(signature.signedAt).toLocaleTimeString('es-PE')}</p>
+              ` : almacenAuth ? `
                 <p style="margin: 0; font-size: 11px; font-weight: 600;">✓ Autorizado digitalmente</p>
                 <p style="margin: 2px 0 0 0; font-size: 10px; color: #6b7280;">${escapeHtml(almacenAuth.user.fullName)}</p>
                 <p style="margin: 2px 0 0 0; font-size: 10px; color: #6b7280;">${almacenIsAdmin ? 'Administrador (actuó en representación del Almacenero)' : 'Almacenero'}</p>
@@ -466,8 +546,106 @@ export function OrderAuthorizationPanel({ order, user, config, onActionComplete,
           <p style="margin: 0; font-size: 10px; color: #9ca3af;">${footerText}</p>
           <p style="margin: 5px 0 0 0; font-size: 9px; color: #9ca3af;">Documento generado el ${new Date().toLocaleDateString('es-PE')} a las ${new Date().toLocaleTimeString('es-PE')}</p>
         </div>
+
+        ${signature ? `
+          <div style="margin-top: 15px; padding: 10px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px;">
+            <p style="margin: 0; font-size: 11px; color: #065f46; text-align: center;">
+              ✓ Documento firmado digitalmente por <strong>${escapeHtml(signature.signerName)}</strong>
+              el ${new Date(signature.signedAt).toLocaleDateString('es-PE')} a las ${new Date(signature.signedAt).toLocaleTimeString('es-PE')}
+              ${signature.method === 'DNIE' ? 'mediante DNI Electrónico (RENIEC)' : 'mediante firma manuscrita digitalizada'}.
+            </p>
+          </div>
+        ` : ''}
       </div>
     `
+  }
+
+  const handleDownloadWord = async () => {
+    if (!order) return
+    try {
+      await downloadOrderDeliveryDocx(order, {
+        institutionName: config?.institutionName,
+        logoUrl: config?.logoUrl,
+        primaryColor: config?.primaryColor,
+      })
+      toast.success('Documento Word generado correctamente')
+    } catch {
+      toast.error('Error al generar el documento Word')
+    }
+  }
+
+  const openSignDialog = () => {
+    setSignDialogOpen(true)
+    setSignMethod('MANUSCRITA')
+    setTimeout(() => clearSignatureCanvas(), 150)
+  }
+
+  const handleSignDocument = async () => {
+    if (!order || !user) return
+
+    let signatureData = ''
+    let certData: string | undefined
+
+    if (signMethod === 'MANUSCRITA') {
+      if (!hasSignature) {
+        toast.error('Dibuje su firma en el recuadro o use la opción de DNI Electrónico')
+        return
+      }
+      const canvas = canvasRef.current
+      if (!canvas) return
+      signatureData = canvas.toDataURL('image/png')
+    } else {
+      try {
+        toast.info('Firmando con su DNI Electrónico...')
+        const payload = JSON.stringify({
+          docType: 'ORDER',
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          ts: Date.now(),
+        })
+        const result = await signWithDnie(payload)
+        signatureData = `data:application/pkcs1;base64,${result.signatureBase64}`
+        certData = result.certData
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Error al firmar con DNI Electrónico')
+        return
+      }
+    }
+
+    setIsSigning(true)
+    try {
+      const signedAt = new Date().toISOString()
+      const content = generatePdfContent(order, {
+        dataUrl: signMethod === 'MANUSCRITA' ? signatureData : undefined,
+        signerName: user.fullName,
+        signedAt,
+        method: signMethod,
+      })
+
+      const response = await apiFetch(`/api/orders/${order.id}/signature`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ html: content, signatureData, certData }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setSignDialogOpen(false)
+        setHasSignature(false)
+        updateOrder(order.id, { ...order, signedPdfUrl: data.url, pdfUrl: data.url })
+        toast.success(signMethod === 'DNIE'
+          ? '✓ Documento firmado con DNI Electrónico y registrado.'
+          : '✓ Documento firmado y registrado correctamente.')
+        onActionComplete()
+      } else {
+        const data = await response.json()
+        toast.error(`[${response.status}] ${data.error || 'Error al firmar el documento'}`)
+      }
+    } catch {
+      toast.error('Error al firmar el documento')
+    } finally {
+      setIsSigning(false)
+    }
   }
 
   const handlePrintPdf = () => {
@@ -593,6 +771,13 @@ export function OrderAuthorizationPanel({ order, user, config, onActionComplete,
                   <FileText className="h-4 w-4 mr-2" />
                   Vista Previa PDF
                 </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleDownloadWord}
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Descargar Word
+                </Button>
               </div>
             </div>
           </div>
@@ -620,15 +805,33 @@ export function OrderAuthorizationPanel({ order, user, config, onActionComplete,
                 <Download className="h-4 w-4 mr-2" />
                 Descargar PDF
               </Button>
+              <Button
+                variant="outline"
+                onClick={handleDownloadWord}
+                className="flex-1"
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Descargar Word (.docx)
+              </Button>
               {(user?.role === 'ALMACENERO' || user?.role === 'ADMINISTRADOR') && (
-                <Button
-                  variant="outline"
-                  onClick={() => setUploadPdfDialogOpen(true)}
-                  className="flex-1"
-                >
-                  <FileUp className="h-4 w-4 mr-2" />
-                  Subir PDF Firmado
-                </Button>
+                <>
+                  <Button
+                    onClick={openSignDialog}
+                    style={{ backgroundColor: config?.primaryColor }}
+                    className="text-white flex-1"
+                  >
+                    <Signature className="h-4 w-4 mr-2" />
+                    Firmar Documento
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setUploadPdfDialogOpen(true)}
+                    className="flex-1"
+                  >
+                    <FileUp className="h-4 w-4 mr-2" />
+                    Subir PDF Firmado
+                  </Button>
+                </>
               )}
             </div>
 
@@ -921,6 +1124,129 @@ export function OrderAuthorizationPanel({ order, user, config, onActionComplete,
                 Subir PDF
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de firma del documento de salida */}
+      <Dialog open={signDialogOpen} onOpenChange={setSignDialogOpen}>
+        <DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[85vh] sm:max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Signature className="h-5 w-5" style={{ color: config?.primaryColor }} />
+              Firmar Documento de Salida
+            </DialogTitle>
+            <DialogDescription>
+              Firme el documento {order?.orderNumber} para el control documentario. La firma quedará
+              registrada y vinculada al pedido.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setSignMethod('MANUSCRITA')}
+                className={`flex items-center justify-center gap-2 rounded-lg border p-3 text-sm font-medium transition-colors ${
+                  signMethod === 'MANUSCRITA'
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-border hover:bg-muted'
+                }`}
+              >
+                <PenLine className="h-4 w-4" />
+                Firma Manuscrita
+              </button>
+              <button
+                type="button"
+                onClick={() => setSignMethod('DNIE')}
+                className={`flex items-center justify-center gap-2 rounded-lg border p-3 text-sm font-medium transition-colors ${
+                  signMethod === 'DNIE'
+                    ? 'border-green-500 bg-green-50 text-green-700'
+                    : 'border-border hover:bg-muted'
+                }`}
+              >
+                <Fingerprint className="h-4 w-4" />
+                DNI Electrónico
+              </button>
+            </div>
+
+            {signMethod === 'MANUSCRITA' ? (
+              <div className="space-y-2">
+                <div className="border rounded-lg overflow-hidden relative bg-white">
+                  <canvas
+                    ref={canvasRef}
+                    className="w-full h-48 touch-none cursor-crosshair"
+                    width={800}
+                    height={300}
+                    onMouseDown={startDrawing}
+                    onMouseMove={draw}
+                    onMouseUp={stopDrawing}
+                    onMouseLeave={stopDrawing}
+                    onTouchStart={(e) => { startDrawing(e); e.preventDefault() }}
+                    onTouchMove={(e) => { draw(e); e.preventDefault() }}
+                    onTouchEnd={stopDrawing}
+                  />
+                  {!hasSignature && (
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
+                      Dibuje su firma aquí
+                    </div>
+                  )}
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={clearSignatureCanvas}
+                  >
+                    <Eraser className="h-4 w-4 mr-2" />
+                    Limpiar
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 rounded-lg border bg-muted/50 space-y-2">
+                <div className="flex items-center gap-2 text-green-700">
+                  <Fingerprint className="h-5 w-5" />
+                  <span className="font-medium">Firma con DNI Electrónico (RENIEC)</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  La firma se realizará con el certificado digital de firma del titular del DNIE.
+                  Para usarla, inserte su DNI Electrónico en el lector y asegúrese de tener
+                  instalado el middleware de RENIEC y el puente de firma del sistema.
+                </p>
+                {dnieAvailable ? (
+                  <p className="text-xs text-green-700 font-medium">✓ DNI Electrónico detectado.</p>
+                ) : (
+                  <p className="text-xs text-amber-700">
+                    ⚠ No se detectó el middleware del DNIE. Si no está disponible, use la firma manuscrita.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="p-3 bg-muted rounded-lg flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Firmará como:</span>
+              <span className="font-medium">{user?.fullName} {user?.dni ? `(DNI: ${user.dni})` : ''}</span>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSignDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleSignDocument}
+                style={{ backgroundColor: config?.primaryColor }}
+                className="text-white"
+                disabled={isSigning || (signMethod === 'MANUSCRITA' && !hasSignature)}
+              >
+                {isSigning ? (
+                  <Clock className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Signature className="h-4 w-4 mr-2" />
+                )}
+                Firmar y Guardar
+              </Button>
+            </DialogFooter>
           </div>
         </DialogContent>
       </Dialog>

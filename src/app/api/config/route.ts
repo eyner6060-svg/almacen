@@ -7,6 +7,9 @@ import { logAudit } from '@/lib/audit'
 import { unlinkSync } from 'fs'
 import path from 'path'
 
+// Siempre leer la configuración desde la base de datos en cada petición
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     let config = await db.systemConfig.findFirst({ where: { id: 1 } })
@@ -63,7 +66,7 @@ export async function PUT(request: NextRequest) {
           force2FA: force2FA ?? false,
           exemptedRoles: exemptedRoles ? JSON.stringify(exemptedRoles) : '[]',
           maxPinAttempts: maxPinAttempts ?? 5,
-          pinLockoutMinutes: pinLockoutMinutes ?? 15,
+          pinLockoutMinutes: pinLockoutMinutes ?? 3,
         }
       })
     } else {
@@ -80,7 +83,7 @@ export async function PUT(request: NextRequest) {
           force2FA: force2FA ?? false,
           exemptedRoles: exemptedRoles ? JSON.stringify(exemptedRoles) : '[]',
           maxPinAttempts: maxPinAttempts ?? 5,
-          pinLockoutMinutes: pinLockoutMinutes ?? 15,
+          pinLockoutMinutes: pinLockoutMinutes ?? 3,
         }
       })
     }

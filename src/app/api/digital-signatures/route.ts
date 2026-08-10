@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { documentType, documentId, signatureData } = body
+    const { documentType, documentId, signatureData, certData } = body
 
     if (!documentType || !documentId || !signatureData) {
       return NextResponse.json({ error: 'Faltan campos requeridos' }, { status: 400 })
@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
         documentId: parseInt(documentId),
         userId: currentUser.id,
         signatureData,
+        certData: certData || null,
         ipAddress,
         userAgent,
       },

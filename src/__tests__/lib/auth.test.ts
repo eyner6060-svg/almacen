@@ -230,7 +230,7 @@ describe('isLockedOut, recordFailedAttempt, clearFailedAttempts', () => {
     const result = await isLockedOut(testIdentifier)
     expect(result.locked).toBe(true)
     expect(result.remainingMinutes).toBeGreaterThan(0)
-    expect(result.remainingMinutes).toBeLessThanOrEqual(15)
+    expect(result.remainingMinutes).toBeLessThanOrEqual(3)
   })
 
   it('permite hasta 4 intentos sin bloquear', async () => {

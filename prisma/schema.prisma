@@ -20,7 +20,7 @@ model SystemConfig {
   force2FA        Boolean  @default(false)
   exemptedRoles   String?  @default("[]")
   maxPinAttempts  Int      @default(5)
-  pinLockoutMinutes Int   @default(15)
+  pinLockoutMinutes Int   @default(3)
   backupEnabled   Boolean  @default(false)
   backupSchedule  String?  // Intervalo en minutos (ej: "60", "1440") o expresión cron
   backupRetentionDays Int @default(30)

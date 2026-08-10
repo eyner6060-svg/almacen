@@ -147,7 +147,9 @@ export async function POST(request: NextRequest) {
     // Generar número de documento (upsert atómico, seguro fuera de transacción)
     const orderNumber = (await getNextDocumentNumber('ORDEN_SALIDA')).documentNumber
 
-    // Transacción: re-leer stock fresco → validar → crear pedido → actualizar inventario
+    // Transacción: re-leer stock fresco → validar → crear pedido
+    // NOTA: El stock NO se descuenta aquí. Se descuenta al confirmar la entrega
+    // (confirm_delivery) para evitar que los bienes queden bloqueados antes de ser entregados.
     const order = await db.$transaction(async (tx) => {
       // 1. Re-leer stock actual dentro de la transacción
       const currentItems = await tx.item.findMany({
@@ -208,24 +210,6 @@ export async function POST(request: NextRequest) {
           items: { include: { item: { select: { id: true, name: true, code: true, model: true, brand: true, category: true, unit: true, itemType: true, status: true, quantity: true } }, patrimonialUnit: { select: { id: true, patrimonialCode: true, status: true, isAvailable: true } } } }
         }
       })
-
-      // 4. Actualizar stock de items (batch)
-      await Promise.all(
-        typedItems.map(orderItem =>
-          tx.item.update({
-            where: { id: orderItem.itemId },
-            data: { quantity: { decrement: orderItem.quantity } }
-          })
-        )
-      )
-
-      const puIdsToUpdate = typedItems.filter(i => i.patrimonialUnitId).map(i => i.patrimonialUnitId!)
-      if (puIdsToUpdate.length > 0) {
-        await tx.patrimonialUnit.updateMany({
-          where: { id: { in: puIdsToUpdate } },
-          data: { isAvailable: false }
-        })
-      }
 
       return created
     })

@@ -113,9 +113,9 @@ export { backend as rateLimitBackend }
 
 export const RateLimitPresets = {
   LOGIN: {
-    windowMs: 15 * 60 * 1000,
+    windowMs: 3 * 60 * 1000,
     maxRequests: 5,
-    message: 'Demasiados intentos de inicio de sesión. Intente nuevamente en 15 minutos.'
+    message: 'Demasiados intentos de inicio de sesión. Intente nuevamente en 3 minutos.'
   },
   API: {
     windowMs: 60 * 1000,

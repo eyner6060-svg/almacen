@@ -6,7 +6,7 @@ import bcrypt from 'bcryptjs'
 import { checkPinAttempt, recordFailedPinAttempt, resetPinAttempts } from '@/lib/pin-attempts'
 
 const MAX_PIN_ATTEMPTS = 5
-const PIN_LOCKOUT_MINUTES = 15
+const PIN_LOCKOUT_MINUTES = 3
 
 export async function POST(request: NextRequest) {
   try {
