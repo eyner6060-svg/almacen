@@ -58,8 +58,9 @@ services:
       - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       - NEXT_TELEMETRY_DISABLED=1
     volumes:
-      # Persistir uploads
+      # Persistir uploads públicos y documentos privados (actas, firmas)
       - almacen-uploads:/app/public/uploads
+      - almacen-private:/app/private
     depends_on:
       postgres:
         condition: service_healthy
@@ -136,6 +137,8 @@ volumes:
   pgadmin-data:
     driver: local
   almacen-uploads:
+    driver: local
+  almacen-private:
     driver: local
 
 # Red para comunicación entre servicios

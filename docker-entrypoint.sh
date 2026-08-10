@@ -5,6 +5,7 @@ echo "Iniciando Sistema de Gestión de Almacen..."
 
 # Crear directorios necesarios si no existen
 mkdir -p /app/public/uploads
+mkdir -p /app/private/uploads
 
 # Ejecutar migraciones de Prisma si DATABASE_URL esta definida
 if [ -n "$DATABASE_URL" ]; then
